@@ -27,6 +27,7 @@ Other useful scripts:
 npm run build   # production build
 npm run start   # run the production build locally
 npm run lint    # lint the codebase
+npm test        # run the test suite
 ```
 
 ## How it works
@@ -47,6 +48,20 @@ npm run lint    # lint the codebase
 Note: OCR downloads its recognition engine and language data from a CDN the
 first time it runs in a given browser, so it requires normal internet access
 on the client.
+
+## Testing
+
+`npm test` runs the [Vitest](https://vitest.dev) suite in `src/lib/`:
+
+- `extract-pdf-text.test.ts` checks that `pdf-parse` reads the expected text
+  from a digital PDF and correctly flags a scanned one as needing OCR.
+- `ocr.test.ts` checks the page-by-page OCR orchestration logic, and runs a
+  real (non-mocked) OCR pass over a scanned fixture page, asserting the
+  recognized text contains the expected phrases. It uses the
+  [`@tesseract.js-data/eng`](https://www.npmjs.com/package/@tesseract.js-data/eng)
+  package for the language data so the test runs offline and
+  deterministically instead of depending on `tesseract.js`'s default CDN
+  fetch.
 
 ## Deployment
 
