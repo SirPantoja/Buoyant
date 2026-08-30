@@ -13,6 +13,7 @@ import {
 } from "@/lib/paragraph-edits";
 import type { RenderedPage } from "@/lib/pdf-paragraphs";
 import { renderEmbeddedPdfPages } from "@/lib/render-pdf-pages";
+import { reviseParagraph } from "@/lib/revise-paragraph";
 import styles from "./page.module.css";
 
 type Source = "embedded" | "ocr";
@@ -33,6 +34,13 @@ type UploadResponse = {
 
 type Status = "idle" | "uploading" | "rendering" | "ocr" | "success" | "error";
 
+// The AI revision flow for whichever paragraph is selected:
+// idle - the textarea is editable, waiting for a submission.
+// loading - a revision request is in flight.
+// reviewing - a response came back; the user must confirm, retry, or edit
+// their instructions before anything is applied to the paragraph.
+type EditPhase = "idle" | "loading" | "reviewing";
+
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<Status>("idle");
@@ -43,6 +51,9 @@ export default function Home() {
   const [editState, setEditState] = useState<ParagraphEditState>({});
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [draftEdit, setDraftEdit] = useState("");
+  const [editPhase, setEditPhase] = useState<EditPhase>("idle");
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -60,8 +71,7 @@ export default function Home() {
     setPages(null);
     setOcrProgress(null);
     setEditState({});
-    setSelectedKey(null);
-    setDraftEdit("");
+    resetEditPanel();
 
     try {
       const formData = new FormData();
@@ -101,17 +111,56 @@ export default function Home() {
     }
   }
 
+  function resetEditPanel() {
+    setSelectedKey(null);
+    setDraftEdit("");
+    setEditPhase("idle");
+    setAiResponse(null);
+    setEditError(null);
+  }
+
   function handleSelectParagraph(key: string) {
     setSelectedKey(key);
     setDraftEdit("");
+    setEditPhase("idle");
+    setAiResponse(null);
+    setEditError(null);
   }
 
-  function handleSubmitEdit() {
+  async function requestRevision() {
     if (!selectedKey || draftEdit.trim().length === 0) {
       return;
     }
-    setEditState((prev) => addEdit(prev, selectedKey, draftEdit.trim()));
+
+    setEditPhase("loading");
+    setEditError(null);
+
+    try {
+      const revision = await reviseParagraph({
+        currentText: getCurrentText(editState, selectedKey) ?? "",
+        instructions: draftEdit.trim(),
+      });
+      setAiResponse(revision);
+      setEditPhase("reviewing");
+    } catch (error) {
+      setEditPhase("idle");
+      setEditError(error instanceof Error ? error.message : "Something went wrong.");
+    }
+  }
+
+  function handleConfirm() {
+    if (!selectedKey || aiResponse === null) {
+      return;
+    }
+    setEditState((prev) => addEdit(prev, selectedKey, aiResponse));
     setDraftEdit("");
+    setEditPhase("idle");
+    setAiResponse(null);
+  }
+
+  function handleTryAgainWithEdits() {
+    setEditPhase("idle");
+    setAiResponse(null);
   }
 
   function handleUndo() {
@@ -216,22 +265,49 @@ export default function Home() {
             {selectedKey && selectedHistory ? (
               <>
                 <div className={styles.editActions}>
-                  <button
-                    type="button"
-                    className={styles.editSubmit}
-                    onClick={handleSubmitEdit}
-                    disabled={draftEdit.trim().length === 0}
-                  >
-                    Submit revisions
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.editUndo}
-                    onClick={handleUndo}
-                    disabled={!hasEdits(editState, selectedKey)}
-                  >
-                    Undo
-                  </button>
+                  {editPhase === "idle" && (
+                    <>
+                      <button
+                        type="button"
+                        className={styles.editSubmit}
+                        onClick={requestRevision}
+                        disabled={draftEdit.trim().length === 0}
+                      >
+                        Submit revisions
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.editUndo}
+                        onClick={handleUndo}
+                        disabled={!hasEdits(editState, selectedKey)}
+                      >
+                        Undo
+                      </button>
+                    </>
+                  )}
+
+                  {editPhase === "loading" && (
+                    <div className={styles.editLoading} role="status">
+                      <span className={styles.spinner} aria-hidden="true" />
+                      Getting AI revision...
+                    </div>
+                  )}
+
+                  {editPhase === "reviewing" && (
+                    <div className={styles.editReviewActions}>
+                      <button type="button" className={styles.editSubmit} onClick={handleConfirm}>
+                        Confirm
+                      </button>
+                      <div className={styles.editReviewSecondary}>
+                        <button type="button" className={styles.editUndo} onClick={requestRevision}>
+                          Try again
+                        </button>
+                        <button type="button" className={styles.editUndo} onClick={handleTryAgainWithEdits}>
+                          Try again with edits
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className={styles.editPanelBody}>
@@ -242,8 +318,22 @@ export default function Home() {
                     value={draftEdit}
                     onChange={(event) => setDraftEdit(event.target.value)}
                     rows={5}
-                    placeholder="Type your replacement text..."
+                    placeholder="Describe the edit you want..."
+                    disabled={editPhase !== "idle"}
                   />
+
+                  {editPhase === "reviewing" && aiResponse !== null && (
+                    <div className={styles.editAiResponse}>
+                      <h3 className={styles.editAiResponseTitle}>AI suggestion</h3>
+                      <p>{aiResponse}</p>
+                    </div>
+                  )}
+
+                  {editError && (
+                    <p role="alert" className={styles.error}>
+                      {editError}
+                    </p>
+                  )}
 
                   {selectedHistory.length > 1 && (
                     <div className={styles.editHistory}>

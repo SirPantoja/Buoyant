@@ -287,6 +287,66 @@
   cursor: not-allowed;
 }
 
+.editLoading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.editReviewActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.editReviewSecondary {
+  display: flex;
+  gap: 8px;
+}
+
+.editReviewSecondary .editUndo {
+  flex: 1;
+  padding: 8px 6px;
+  font-size: 12px;
+}
+
+.editAiResponse {
+  border: 1px solid var(--badge-embedded-text);
+  background: color-mix(in srgb, var(--badge-embedded-text) 8%, transparent);
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.editAiResponseTitle {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--badge-embedded-text);
+}
+
 .editHistory {
   border-top: 1px solid var(--border);
   padding-top: 12px;

@@ -52,13 +52,24 @@ npm test        # run the test suite
   directly from the paragraph regions Tesseract finds while recognizing the
   page (`src/lib/ocr.ts`).
 - Clicking a paragraph opens an edit panel to the side with "Submit
-  revisions" and "Undo" buttons at its top and a text box below them.
-  Submitting replaces that paragraph's display with the text you typed.
-  Every version of a paragraph (the original plus each edit) is kept in
-  order in `src/lib/paragraph-edits.ts`; Undo permanently drops the latest
-  entry, reverting to whatever came before it — there's no redo, so an
-  undone edit is gone for good. Undo is disabled once a paragraph is back
-  to its original text.
+  revisions" and "Undo" buttons at its top and a text box below them, where
+  you describe the edit you want. Submitting sends that instruction to
+  `/api/revise-paragraph` (`src/lib/revise-paragraph.ts`), which is meant to
+  eventually call a real model but for now runs `generateRevision`
+  (`src/lib/generate-revision.ts`) — a stand-in that waits ~2 seconds and
+  always returns the fixed string `"this is an ai edit"`, so the request/
+  loading/review flow is already real even though the "AI" isn't yet. While
+  the request is in flight the panel shows a spinner; once a response comes
+  back you choose to **Confirm** it (applies to the paragraph), **Try
+  again** (resends the same instructions), or **Try again with edits**
+  (goes back to the text box, prefilled with what you typed, to revise your
+  instructions before resending) — nothing is applied to the paragraph
+  until you confirm.
+- Every version of a paragraph (the original plus each *confirmed* edit) is
+  kept in order in `src/lib/paragraph-edits.ts`; Undo permanently drops the
+  latest entry, reverting to whatever came before it — there's no redo, so
+  an undone edit is gone for good. Undo is disabled once a paragraph is
+  back to its original text.
 - The edit panel stays on screen as you scroll through a long PDF (it's
   `position: sticky`, capped to the viewport height with its own internal
   scroll for a long history list). This requires `html`/`body` to have
@@ -93,6 +104,12 @@ on the client.
   immutably, reports the current (latest) text for a paragraph, and checks
   that undo permanently drops the latest edit while being a no-op once a
   paragraph is back to its original text.
+- `generate-revision.test.ts` checks the dummy AI stand-in resolves with its
+  fixed response only after the simulated delay (using fake timers, so the
+  test doesn't actually wait).
+- `revise-paragraph.test.ts` checks the client-side request helper posts
+  the current text and instructions to `/api/revise-paragraph` and returns
+  the result, and that it surfaces the server's error message on failure.
 
 ## Deployment
 
