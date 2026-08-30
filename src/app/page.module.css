@@ -167,6 +167,14 @@
   padding: 2px 4px;
 }
 
+/* Edited paragraphs cover the original page image, so hovering must keep
+   that background opaque - the generic hover's translucent tint would
+   otherwise let the original text show through underneath. */
+.paragraphBoxEdited:hover {
+  background-color: var(--edited-bg);
+  border-color: var(--edited-border);
+}
+
 .paragraphBoxSelected {
   border-color: var(--text-primary);
 }
