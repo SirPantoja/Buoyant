@@ -8,23 +8,23 @@ import { runOcrPipeline } from "./ocr";
 const fixturesDir = path.join(__dirname, "__fixtures__");
 
 describe("runOcrPipeline", () => {
-  it("renders and recognizes each page in order, then joins the text", async () => {
+  it("renders and processes each page in order", async () => {
     const calls: string[] = [];
 
-    const text = await runOcrPipeline(
+    const results = await runOcrPipeline(
       2,
       async (pageNumber) => {
         calls.push(`render:${pageNumber}`);
         return `canvas-${pageNumber}`;
       },
       async (canvas) => {
-        calls.push(`recognize:${canvas}`);
-        return ` page text for ${canvas} `;
+        calls.push(`process:${canvas}`);
+        return `result for ${canvas}`;
       },
     );
 
-    expect(text).toBe("page text for canvas-1\n\npage text for canvas-2");
-    expect(calls).toEqual(["render:1", "recognize:canvas-1", "render:2", "recognize:canvas-2"]);
+    expect(results).toEqual(["result for canvas-1", "result for canvas-2"]);
+    expect(calls).toEqual(["render:1", "process:canvas-1", "render:2", "process:canvas-2"]);
   });
 
   it("reports rendering/recognizing progress per page", async () => {
@@ -33,7 +33,7 @@ describe("runOcrPipeline", () => {
     await runOcrPipeline(
       2,
       async () => "canvas",
-      async () => "text",
+      async () => "result",
       (p) => progress.push(`${p.status}:${p.page}/${p.totalPages}`),
     );
 
@@ -59,18 +59,24 @@ describe("OCR against a real scanned PDF", () => {
     });
 
     try {
-      const text = await runOcrPipeline(pdf.numPages, async (pageNumber) => {
-        const page = await pdf.getPage(pageNumber);
-        const viewport = page.getViewport({ scale: 2 });
-        const canvas = createCanvas(viewport.width, viewport.height);
-        const context = canvas.getContext("2d");
-        await page.render({
-          canvasContext: context as unknown as CanvasRenderingContext2D,
-          canvas: canvas as unknown as HTMLCanvasElement,
-          viewport,
-        }).promise;
-        return canvas;
-      }, recognizeNodeCanvas(worker));
+      const pageTexts = await runOcrPipeline(
+        pdf.numPages,
+        async (pageNumber) => {
+          const page = await pdf.getPage(pageNumber);
+          const viewport = page.getViewport({ scale: 2 });
+          const canvas = createCanvas(viewport.width, viewport.height);
+          const context = canvas.getContext("2d");
+          await page.render({
+            canvasContext: context as unknown as CanvasRenderingContext2D,
+            canvas: canvas as unknown as HTMLCanvasElement,
+            viewport,
+          }).promise;
+          return canvas;
+        },
+        recognizeNodeCanvas(worker),
+      );
+
+      const text = pageTexts.join("\n\n");
 
       // OCR isn't pixel-perfect, so check for recognizable phrases from the
       // scanned page rather than an exact match.

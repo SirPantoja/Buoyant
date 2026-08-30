@@ -1,7 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { extractTextWithOcr, type OcrProgress } from "@/lib/ocr";
+import { renderPdfWithOcr, type OcrProgress } from "@/lib/ocr";
+import type { RenderedPage } from "@/lib/pdf-paragraphs";
+import { renderEmbeddedPdfPages } from "@/lib/render-pdf-pages";
 import styles from "./page.module.css";
 
 type Source = "embedded" | "ocr";
@@ -20,13 +22,14 @@ type UploadResponse = {
   text: string | null;
 };
 
-type Status = "idle" | "uploading" | "ocr" | "success" | "error";
+type Status = "idle" | "uploading" | "rendering" | "ocr" | "success" | "error";
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
+  const [pages, setPages] = useState<RenderedPage[] | null>(null);
   const [ocrProgress, setOcrProgress] = useState<OcrProgress | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -42,6 +45,7 @@ export default function Home() {
     setStatus("uploading");
     setMessage(null);
     setResult(null);
+    setPages(null);
     setOcrProgress(null);
 
     try {
@@ -56,15 +60,19 @@ export default function Home() {
       }
 
       if (data.source === "embedded" && data.text !== null) {
+        setStatus("rendering");
+        const renderedPages = await renderEmbeddedPdfPages(file);
         setResult({ name: data.name, size: data.size, text: data.text, source: "embedded" });
+        setPages(renderedPages);
         setStatus("success");
         return;
       }
 
       // No usable text layer, so this is likely a scan: run OCR in the browser.
       setStatus("ocr");
-      const text = await extractTextWithOcr(file, setOcrProgress);
+      const { text, pages: ocrPages } = await renderPdfWithOcr(file, setOcrProgress);
       setResult({ name: data.name, size: data.size, text, source: "ocr" });
+      setPages(ocrPages);
       setStatus("success");
     } catch (error) {
       setStatus("error");
@@ -74,25 +82,29 @@ export default function Home() {
     }
   }
 
+  const busy = status === "uploading" || status === "rendering" || status === "ocr";
+
   return (
     <div className={styles.page}>
       <main className={styles.main}>
         <h1>Upload a PDF</h1>
         <form onSubmit={handleSubmit} className={styles.form}>
           <input ref={inputRef} type="file" accept="application/pdf" />
-          <button type="submit" disabled={status === "uploading" || status === "ocr"}>
+          <button type="submit" disabled={busy}>
             {status === "uploading"
               ? "Uploading..."
-              : status === "ocr"
-                ? "Running OCR..."
-                : "Upload"}
+              : status === "rendering"
+                ? "Rendering..."
+                : status === "ocr"
+                  ? "Running OCR..."
+                  : "Upload"}
           </button>
         </form>
 
         {status === "ocr" && ocrProgress && (
           <p role="status">
-            {ocrProgress.status === "rendering" ? "Rendering" : "Reading"} page{" "}
-            {ocrProgress.page} of {ocrProgress.totalPages}...
+            {ocrProgress.status === "rendering" ? "Rendering" : "Reading"} page {ocrProgress.page} of{" "}
+            {ocrProgress.totalPages}...
           </p>
         )}
 
@@ -118,6 +130,36 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {status === "success" && pages && pages.length > 0 && (
+        <div className={styles.viewer}>
+          {pages.map((page, pageIndex) => (
+            <div
+              key={pageIndex}
+              className={styles.pageWrapper}
+              style={{ aspectRatio: `${page.width} / ${page.height}` }}
+            >
+              {/* Rendered client-side from the PDF, so it's a data URL rather than a static asset. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={page.dataUrl} alt={`Page ${pageIndex + 1}`} className={styles.pageImage} />
+              {page.paragraphs.map((paragraph, paragraphIndex) => (
+                <div
+                  key={paragraphIndex}
+                  className={styles.paragraphBox}
+                  title={paragraph.text}
+                  onClick={() => {}}
+                  style={{
+                    left: `${(paragraph.x / page.width) * 100}%`,
+                    top: `${(paragraph.y / page.height) * 100}%`,
+                    width: `${(paragraph.width / page.width) * 100}%`,
+                    height: `${(paragraph.height / page.height) * 100}%`,
+                  }}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
