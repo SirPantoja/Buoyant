@@ -105,9 +105,15 @@ export default function Home() {
         {status === "success" && result && (
           <div className={styles.result}>
             <p role="status">
-              Read <strong>{result.name}</strong> ({formatBytes(result.size)}) using{" "}
-              {result.source === "embedded" ? "its embedded text layer" : "OCR"}.
+              Read <strong>{result.name}</strong> ({formatBytes(result.size)})
             </p>
+            <span
+              className={`${styles.badge} ${
+                result.source === "embedded" ? styles.badgeEmbedded : styles.badgeOcr
+              }`}
+            >
+              {result.source === "embedded" ? "Detected via PDF text metadata" : "Detected via Tesseract OCR"}
+            </span>
             <pre className={styles.text}>{result.text || "(no text found)"}</pre>
           </div>
         )}
