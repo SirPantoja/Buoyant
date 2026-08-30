@@ -248,8 +248,14 @@
   resize: vertical;
 }
 
-.editSubmit {
+.editActions {
+  display: flex;
   flex-shrink: 0;
+  gap: 8px;
+}
+
+.editSubmit {
+  flex: 1;
   padding: 8px 16px;
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -262,6 +268,22 @@
 
 .editSubmit:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.editUndo {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.editUndo:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 

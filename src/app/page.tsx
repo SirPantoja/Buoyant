@@ -8,6 +8,7 @@ import {
   getCurrentText,
   hasEdits,
   paragraphKey,
+  undoEdit,
   type ParagraphEditState,
 } from "@/lib/paragraph-edits";
 import type { RenderedPage } from "@/lib/pdf-paragraphs";
@@ -113,6 +114,13 @@ export default function Home() {
     setDraftEdit("");
   }
 
+  function handleUndo() {
+    if (!selectedKey) {
+      return;
+    }
+    setEditState((prev) => undoEdit(prev, selectedKey));
+  }
+
   const busy = status === "uploading" || status === "rendering" || status === "ocr";
   const selectedHistory = selectedKey ? editState[selectedKey] : undefined;
 
@@ -207,14 +215,24 @@ export default function Home() {
           <aside className={styles.editPanel}>
             {selectedKey && selectedHistory ? (
               <>
-                <button
-                  type="button"
-                  className={styles.editSubmit}
-                  onClick={handleSubmitEdit}
-                  disabled={draftEdit.trim().length === 0}
-                >
-                  Submit revisions
-                </button>
+                <div className={styles.editActions}>
+                  <button
+                    type="button"
+                    className={styles.editSubmit}
+                    onClick={handleSubmitEdit}
+                    disabled={draftEdit.trim().length === 0}
+                  >
+                    Submit revisions
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.editUndo}
+                    onClick={handleUndo}
+                    disabled={!hasEdits(editState, selectedKey)}
+                  >
+                    Undo
+                  </button>
+                </div>
 
                 <div className={styles.editPanelBody}>
                   <h2 className={styles.editPanelTitle}>Edit paragraph</h2>

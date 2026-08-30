@@ -51,13 +51,14 @@ npm test        # run the test suite
   positions (`src/lib/render-pdf-pages.ts`); for a scanned PDF, they come
   directly from the paragraph regions Tesseract finds while recognizing the
   page (`src/lib/ocr.ts`).
-- Clicking a paragraph opens an edit panel to the side with a "Submit
-  revisions" button at its top and a text box below it. Submitting replaces
-  that paragraph's display with the text you typed. Every version of a
-  paragraph (the original plus each edit) is kept in order in
-  `src/lib/paragraph-edits.ts`, so a future "undo" only needs to pop the
-  latest entry off a paragraph's history — there's no undo button yet, just
-  the history to support one.
+- Clicking a paragraph opens an edit panel to the side with "Submit
+  revisions" and "Undo" buttons at its top and a text box below them.
+  Submitting replaces that paragraph's display with the text you typed.
+  Every version of a paragraph (the original plus each edit) is kept in
+  order in `src/lib/paragraph-edits.ts`; Undo permanently drops the latest
+  entry, reverting to whatever came before it — there's no redo, so an
+  undone edit is gone for good. Undo is disabled once a paragraph is back
+  to its original text.
 - The edit panel stays on screen as you scroll through a long PDF (it's
   `position: sticky`, capped to the viewport height with its own internal
   scroll for a long history list). This requires `html`/`body` to have
@@ -89,7 +90,9 @@ on the client.
   path.
 - `paragraph-edits.test.ts` checks the per-paragraph edit history: it seeds
   one history per paragraph with the original text, appends new edits
-  immutably, and reports the current (latest) text for a paragraph.
+  immutably, reports the current (latest) text for a paragraph, and checks
+  that undo permanently drops the latest edit while being a no-op once a
+  paragraph is back to its original text.
 
 ## Deployment
 

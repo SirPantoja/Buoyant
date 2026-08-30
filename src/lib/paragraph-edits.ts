@@ -36,3 +36,14 @@ export function getCurrentText(state: ParagraphEditState, key: string): string |
 export function hasEdits(state: ParagraphEditState, key: string): boolean {
   return (state[key]?.length ?? 0) > 1;
 }
+
+// Permanently drops the latest edit, falling back to the previous version
+// (or the original). There's no redo: once undone, that edit is gone. A
+// paragraph already at its original text is left untouched.
+export function undoEdit(state: ParagraphEditState, key: string): ParagraphEditState {
+  const history = state[key];
+  if (!history || history.length <= 1) {
+    return state;
+  }
+  return { ...state, [key]: history.slice(0, -1) };
+}
