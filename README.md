@@ -2,14 +2,32 @@
 
 A Next.js + TypeScript app for uploading a PDF file.
 
-## Getting started
+## Running locally
+
+**Prerequisites:** [Node.js](https://nodejs.org/) 20 or later and npm.
+
+1. Clone the repository and move into it:
+   ```bash
+   git clone https://github.com/SirPantoja/Buoyant.git
+   cd Buoyant
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+4. Open [http://localhost:3000](http://localhost:3000) in your browser and upload a PDF.
+
+Other useful scripts:
 
 ```bash
-npm install
-npm run dev
+npm run build   # production build
+npm run start   # run the production build locally
+npm run lint    # lint the codebase
 ```
-
-Open [http://localhost:3000](http://localhost:3000) and upload a PDF.
 
 ## How it works
 
