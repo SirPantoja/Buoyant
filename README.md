@@ -55,15 +55,15 @@ npm test        # run the test suite
   `pdfjs-dist`'s text-layer metadata for an embedded-text PDF, or estimated
   from line height for a scanned one; color comes from sampling the
   rendered page's actual pixels (`src/lib/sample-color.ts`), since neither
-  source exposes fill color directly. A large gap **or** a clearly
-  different color splits a paragraph into two — so a colored callout or
-  link inside a block of text becomes its own hoverable/editable region
-  even without extra whitespace around it. Font family and size are only
-  used to style an edited paragraph's overlay text (so a confirmed edit
-  keeps looking like it belongs in that PDF rather than in a generic box),
-  not to decide where to split — text can legitimately vary in size or
-  font within one paragraph (an inline code span, an abbreviation) without
-  that meaning it's a different paragraph.
+  source exposes fill color directly. Paragraphs split purely on font
+  size: a line whose size is clearly different from the line before it
+  starts a new paragraph, regardless of the gap between them or any
+  color difference — so a heading immediately above body text splits into
+  two, while two blocks of same-sized text separated by a blank line stay
+  merged into one. Font family and color are only used to style an edited
+  paragraph's overlay text (so a confirmed edit keeps looking like it
+  belongs in that PDF rather than in a generic box), not to decide where
+  to split.
 - Clicking a paragraph opens an edit panel to the side with "Submit
   revisions" and "Undo" buttons at its top and a text box below them, where
   you describe the edit you want. Submitting sends that instruction to
@@ -108,12 +108,12 @@ on the client.
   deterministically instead of depending on `tesseract.js`'s default CDN
   fetch.
 - `pdf-paragraphs.test.ts` checks the paragraph-splitting heuristic: lines
-  with a small gap and no clear color difference merge into one paragraph;
-  a large gap or a clearly different color each start a new one on their
-  own; color noise within tolerance doesn't cause a false split; and a
-  font family or size change *alone* does not cause a split. Also checks
-  that Tesseract's paragraph/line blocks are flattened and re-split the
-  same way for the OCR path.
+  with the same font size merge into one paragraph even across a large
+  gap; a font size change alone starts a new paragraph even with no extra
+  gap; a font family or color change alone does not cause a split; and
+  font-size noise within tolerance doesn't cause a false split. Also
+  checks that Tesseract's paragraph/line blocks are flattened and
+  re-split the same way for the OCR path.
 - `sample-color.test.ts` checks that the pixel-sampling color reader finds
   ink wherever it is in a line's box, using a fake canvas context — it
   doesn't just check one row of pixels, since a real glyph's ink might not

@@ -35,44 +35,34 @@ export type StyledLine = {
   color: RgbColor;
 };
 
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+// How far apart two font sizes can be (as a ratio) before they count as
+// "different". Sizes are derived from rendering/recognition data rather
+// than read as an exact declared value, so this isn't 1.0.
+const FONT_SIZE_CHANGE_RATIO = 1.2;
+
+function fontSizesClose(a: number, b: number): boolean {
+  const ratio = a > b ? a / b : b / a;
+  return ratio <= FONT_SIZE_CHANGE_RATIO;
 }
 
-// How far apart two sampled colors can be (Euclidean RGB distance) before
-// they count as "different". Sampling real pixels means anti-aliasing and
-// compression noise can shift the same visual color by a few units between
-// lines, so this isn't 0.
-const COLOR_DISTANCE_THRESHOLD = 60;
-
-function colorsClose(a: RgbColor, b: RgbColor): boolean {
-  const distance = Math.sqrt((a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2);
-  return distance <= COLOR_DISTANCE_THRESHOLD;
-}
-
-// Groups lines into paragraphs: a large vertical gap OR a clearly different
-// color starts a new paragraph, so a colored run of text (a callout, a
-// link, a highlighted term) becomes its own hoverable/editable region even
-// when it isn't separated by extra whitespace. Neither a PDF's text layer
-// nor Tesseract marks "paragraph" boundaries explicitly, so this is a
-// heuristic. Font family and size are still captured per line (below) for
+// Groups lines into paragraphs purely by font size: a line whose size is
+// clearly different from the line before it starts a new paragraph,
+// regardless of how close together or far apart they sit vertically. So a
+// heading immediately above body text splits into two paragraphs, while
+// two blocks of same-sized text separated by a blank line stay merged
+// into one. Font family and color are still captured per line (below) for
 // styling an edited paragraph's overlay text, just not used to split.
 export function groupLinesIntoParagraphs(lines: StyledLine[]): ParagraphBox[] {
   if (lines.length === 0) {
     return [];
   }
 
-  const medianLineHeight = median(lines.map((l) => l.yMax - l.yMin)) || 1;
-  const paragraphBreakGap = medianLineHeight * 0.8;
-
   const paragraphs: StyledLine[][] = [];
   let current: StyledLine[] = [];
 
   for (const line of lines) {
     const prev = current[current.length - 1];
-    if (prev && (line.yMin - prev.yMax > paragraphBreakGap || !colorsClose(prev.color, line.color))) {
+    if (prev && !fontSizesClose(prev.fontSize, line.fontSize)) {
       paragraphs.push(current);
       current = [];
     }
@@ -135,8 +125,8 @@ function linesFromTesseractParagraph(paragraph: TesseractParagraph, sampleColor:
 
 // Tesseract already segments a recognized page into paragraphs, but a
 // "paragraph" there is just a block of visually close lines - it doesn't
-// account for a color change partway through, so each one is re-split the
-// same way as the embedded-text-layer path.
+// account for a font size change partway through, so each one is
+// re-split the same way as the embedded-text-layer path.
 export function extractOcrParagraphs(page: TesseractPageLike, sampleColor: SampleColorFn): ParagraphBox[] {
   if (!page.blocks) {
     return [];
