@@ -14,11 +14,14 @@
   --edited-border: #c9821a;
 
   display: flex;
-  flex: 1;
   min-height: 100vh;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* Not `center`: centering an overflowing flex container breaks
+     `position: sticky` on descendants (like the edit panel), since the
+     browser has to give the content a negative start offset to center it. */
+  justify-content: flex-start;
+  padding-top: 60px;
   font-family: var(--font-geist-sans);
   background-color: var(--background);
 }
@@ -191,6 +194,10 @@
   flex: 0 0 280px;
   position: sticky;
   top: 24px;
+  /* Capped to the viewport (minus the sticky offset on both sides) so the
+     whole panel - not just its top edge - stays on screen while scrolling,
+     even once the history list below grows tall. */
+  max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -199,6 +206,15 @@
   border: 1px solid var(--border);
   background: var(--foreground);
   color: var(--text-primary);
+  overflow: hidden;
+}
+
+.editPanelBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .editPanelPlaceholder {
@@ -233,6 +249,7 @@
 }
 
 .editSubmit {
+  flex-shrink: 0;
   padding: 8px 16px;
   border-radius: 8px;
   border: 1px solid var(--border);

@@ -207,39 +207,42 @@ export default function Home() {
           <aside className={styles.editPanel}>
             {selectedKey && selectedHistory ? (
               <>
-                <h2 className={styles.editPanelTitle}>Edit paragraph</h2>
-                <p className={styles.editPanelCurrent}>{selectedHistory[selectedHistory.length - 1]}</p>
-                <textarea
-                  className={styles.editTextarea}
-                  value={draftEdit}
-                  onChange={(event) => setDraftEdit(event.target.value)}
-                  rows={5}
-                  placeholder="Type your replacement text..."
-                />
                 <button
                   type="button"
                   className={styles.editSubmit}
                   onClick={handleSubmitEdit}
                   disabled={draftEdit.trim().length === 0}
                 >
-                  What are your edits?
+                  Submit revisions
                 </button>
 
-                {selectedHistory.length > 1 && (
-                  <div className={styles.editHistory}>
-                    <h3 className={styles.editHistoryTitle}>History</h3>
-                    <ol className={styles.editHistoryList}>
-                      {selectedHistory.map((entry, index) => (
-                        <li key={index}>
-                          <span className={styles.editHistoryLabel}>
-                            {index === 0 ? "Original" : `Edit ${index}`}
-                          </span>
-                          {entry}
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
+                <div className={styles.editPanelBody}>
+                  <h2 className={styles.editPanelTitle}>Edit paragraph</h2>
+                  <p className={styles.editPanelCurrent}>{selectedHistory[selectedHistory.length - 1]}</p>
+                  <textarea
+                    className={styles.editTextarea}
+                    value={draftEdit}
+                    onChange={(event) => setDraftEdit(event.target.value)}
+                    rows={5}
+                    placeholder="Type your replacement text..."
+                  />
+
+                  {selectedHistory.length > 1 && (
+                    <div className={styles.editHistory}>
+                      <h3 className={styles.editHistoryTitle}>History</h3>
+                      <ol className={styles.editHistoryList}>
+                        {selectedHistory.map((entry, index) => (
+                          <li key={index}>
+                            <span className={styles.editHistoryLabel}>
+                              {index === 0 ? "Original" : `Edit ${index}`}
+                            </span>
+                            {entry}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+                </div>
               </>
             ) : (
               <p className={styles.editPanelPlaceholder}>Click a paragraph to edit it.</p>
