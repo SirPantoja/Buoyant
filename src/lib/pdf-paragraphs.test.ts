@@ -42,7 +42,7 @@ describe("groupLinesIntoParagraphs", () => {
     expect(paragraphs.map((p) => p.text)).toEqual(["First paragraph", "Second paragraph"]);
   });
 
-  it("splits on a font family change even with no extra gap", () => {
+  it("does not split on a font family change alone", () => {
     const lines = [
       line({ text: "Body text", yMin: 0, yMax: 12, fontFamily: "serif" }),
       line({ text: "Heading font", yMin: 13, yMax: 25, fontFamily: "monospace" }),
@@ -50,10 +50,10 @@ describe("groupLinesIntoParagraphs", () => {
 
     const paragraphs = groupLinesIntoParagraphs(lines);
 
-    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs).toHaveLength(1);
   });
 
-  it("splits on a large font size change even with no extra gap", () => {
+  it("does not split on a font size change alone", () => {
     const lines = [
       line({ text: "Small text", yMin: 0, yMax: 10, fontSize: 10 }),
       line({ text: "Big text", yMin: 11, yMax: 30, fontSize: 20 }),
@@ -61,7 +61,7 @@ describe("groupLinesIntoParagraphs", () => {
 
     const paragraphs = groupLinesIntoParagraphs(lines);
 
-    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs).toHaveLength(1);
   });
 
   it("splits on a clearly different color even with no extra gap", () => {
@@ -128,7 +128,7 @@ describe("extractOcrParagraphs", () => {
     expect(paragraphs[0].text).toBe("First line Second line");
   });
 
-  it("splits a Tesseract paragraph further when its lines' sizes diverge", () => {
+  it("does not split a Tesseract paragraph just because its lines' sizes diverge", () => {
     const page = {
       blocks: [
         {
@@ -148,8 +148,8 @@ describe("extractOcrParagraphs", () => {
 
     const paragraphs = extractOcrParagraphs(page, sampleColor);
 
-    expect(paragraphs).toHaveLength(2);
-    expect(paragraphs.map((p) => p.text)).toEqual(["Small line", "Much bigger line"]);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0].text).toBe("Small line Much bigger line");
   });
 
   it("splits a Tesseract paragraph further when its lines' colors diverge", () => {
