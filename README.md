@@ -35,7 +35,7 @@ npm test        # run the test suite
 - `src/app/page.tsx` renders a file picker restricted to PDFs and posts the
   selected file to `/api/upload`.
 - `src/app/api/upload/route.ts` validates the upload (must be a PDF, up to
-  10 MB), then uses [`pdf-parse`](https://www.npmjs.com/package/pdf-parse) to
+  50 MB), then uses [`pdf-parse`](https://www.npmjs.com/package/pdf-parse) to
   read the PDF's embedded text layer.
 - If the PDF has little or no embedded text (i.e. it's a scanned document),
   the server tells the client to fall back to OCR instead. The browser then
