@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { extractPdfText } from "@/lib/extract-pdf-text";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
 export async function POST(request: Request) {
   let formData: FormData;
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   }
 
   if (file.size > MAX_FILE_SIZE) {
-    return NextResponse.json({ error: "File exceeds the 10 MB limit." }, { status: 400 });
+    return NextResponse.json({ error: "File exceeds the 50 MB limit." }, { status: 400 });
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
