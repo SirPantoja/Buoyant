@@ -1,6 +1,6 @@
 # Buoyant
 
-A Next.js + TypeScript app for uploading a PDF file.
+A Next.js + TypeScript app for uploading a PDF and reading the text out of it.
 
 ## Running locally
 
@@ -34,7 +34,19 @@ npm run lint    # lint the codebase
 - `src/app/page.tsx` renders a file picker restricted to PDFs and posts the
   selected file to `/api/upload`.
 - `src/app/api/upload/route.ts` validates the upload (must be a PDF, up to
-  10 MB) and responds with the file's name and size.
+  10 MB), then uses [`pdf-parse`](https://www.npmjs.com/package/pdf-parse) to
+  read the PDF's embedded text layer.
+- If the PDF has little or no embedded text (i.e. it's a scanned document),
+  the server tells the client to fall back to OCR instead. The browser then
+  renders each page to a canvas with [`pdfjs-dist`](https://www.npmjs.com/package/pdfjs-dist)
+  and reads the text off those images with [`tesseract.js`](https://www.npmjs.com/package/tesseract.js)
+  (`src/lib/ocr.ts`). This runs entirely in the browser, so it needs no server
+  compute and works within Vercel's serverless limits.
+- Either way, the extracted text is displayed on the page once it's ready.
+
+Note: OCR downloads its recognition engine and language data from a CDN the
+first time it runs in a given browser, so it requires normal internet access
+on the client.
 
 ## Deployment
 
