@@ -1,3 +1,5 @@
+import { extractOcrParagraphs, type RenderedPage } from "./pdf-paragraphs";
+
 export type OcrProgress = {
   page: number;
   totalPages: number;
@@ -6,35 +8,39 @@ export type OcrProgress = {
 
 // Renders one page (1-indexed) to whatever canvas-like object the
 // environment uses (an HTMLCanvasElement in the browser, a node-canvas
-// Canvas in tests), then reads text off it. Kept environment-agnostic so
-// the same page-by-page orchestration can run in the browser and in tests.
+// Canvas in tests), then turns it into a result. Kept environment-agnostic
+// so the same page-by-page orchestration can run in the browser and in
+// tests.
 export type PageRenderer = (pageNumber: number) => Promise<unknown>;
-export type PageRecognizer = (canvas: unknown) => Promise<string>;
+export type PageProcessor<T> = (canvas: unknown) => Promise<T>;
 
-export async function runOcrPipeline(
+export async function runOcrPipeline<T>(
   totalPages: number,
   renderPage: PageRenderer,
-  recognizePage: PageRecognizer,
+  processPage: PageProcessor<T>,
   onProgress?: (progress: OcrProgress) => void,
-): Promise<string> {
-  const pageTexts: string[] = [];
+): Promise<T[]> {
+  const results: T[] = [];
 
   for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
     onProgress?.({ page: pageNumber, totalPages, status: "rendering" });
     const canvas = await renderPage(pageNumber);
 
     onProgress?.({ page: pageNumber, totalPages, status: "recognizing" });
-    const text = await recognizePage(canvas);
-    pageTexts.push(text.trim());
+    const result = await processPage(canvas);
+    results.push(result);
   }
 
-  return pageTexts.join("\n\n").trim();
+  return results;
 }
 
-export async function extractTextWithOcr(
+// Renders each page of a scanned PDF to a canvas and runs OCR over it,
+// returning both the plain extracted text and, per page, the image plus
+// the paragraph regions Tesseract found on it (for the interactive viewer).
+export async function renderPdfWithOcr(
   file: File,
   onProgress?: (progress: OcrProgress) => void,
-): Promise<string> {
+): Promise<{ text: string; pages: RenderedPage[] }> {
   const [pdfjsLib, tesseract] = await Promise.all([import("pdfjs-dist"), import("tesseract.js")]);
 
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -47,7 +53,7 @@ export async function extractTextWithOcr(
   const worker = await tesseract.createWorker("eng");
 
   try {
-    return await runOcrPipeline(
+    const pages = await runOcrPipeline(
       pdf.numPages,
       async (pageNumber) => {
         const page = await pdf.getPage(pageNumber);
@@ -65,13 +71,27 @@ export async function extractTextWithOcr(
         return canvas;
       },
       async (canvas) => {
-        const {
-          data: { text },
-        } = await worker.recognize(canvas as HTMLCanvasElement);
-        return text;
+        const htmlCanvas = canvas as HTMLCanvasElement;
+        const { data } = await worker.recognize(htmlCanvas);
+
+        return {
+          text: data.text.trim(),
+          dataUrl: htmlCanvas.toDataURL("image/png"),
+          width: htmlCanvas.width,
+          height: htmlCanvas.height,
+          paragraphs: extractOcrParagraphs(data),
+        };
       },
       onProgress,
     );
+
+    return {
+      text: pages
+        .map((p) => p.text)
+        .join("\n\n")
+        .trim(),
+      pages: pages.map(({ dataUrl, width, height, paragraphs }) => ({ dataUrl, width, height, paragraphs })),
+    };
   } finally {
     await worker.terminate();
   }

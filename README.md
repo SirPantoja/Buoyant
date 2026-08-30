@@ -44,6 +44,13 @@ npm test        # run the test suite
   (`src/lib/ocr.ts`). This runs entirely in the browser, so it needs no server
   compute and works within Vercel's serverless limits.
 - Either way, the extracted text is displayed on the page once it's ready.
+- The browser also renders every page of the PDF as an image and overlays a
+  box around each paragraph (`src/lib/pdf-paragraphs.ts`), so hovering over
+  a paragraph on the page highlights it. For a PDF with an embedded text
+  layer, the boxes come from grouping `pdfjs-dist`'s per-line text
+  positions (`src/lib/render-pdf-pages.ts`); for a scanned PDF, they come
+  directly from the paragraph regions Tesseract finds while recognizing the
+  page (`src/lib/ocr.ts`). Clicking a paragraph doesn't do anything yet.
 
 Note: OCR downloads its recognition engine and language data from a CDN the
 first time it runs in a given browser, so it requires normal internet access
@@ -62,6 +69,11 @@ on the client.
   package for the language data so the test runs offline and
   deterministically instead of depending on `tesseract.js`'s default CDN
   fetch.
+- `pdf-paragraphs.test.ts` checks the paragraph-detection heuristics: that
+  text items sharing a line and nearby lines are grouped into one
+  paragraph, that a large vertical gap starts a new one, and that
+  Tesseract's own paragraph blocks are flattened correctly for the OCR
+  path.
 
 ## Deployment
 
