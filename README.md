@@ -50,7 +50,13 @@ npm test        # run the test suite
   layer, the boxes come from grouping `pdfjs-dist`'s per-line text
   positions (`src/lib/render-pdf-pages.ts`); for a scanned PDF, they come
   directly from the paragraph regions Tesseract finds while recognizing the
-  page (`src/lib/ocr.ts`). Clicking a paragraph doesn't do anything yet.
+  page (`src/lib/ocr.ts`).
+- Clicking a paragraph opens an edit panel to the side with a text box and a
+  "What are your edits?" button. Submitting replaces that paragraph's
+  display with the text you typed. Every version of a paragraph (the
+  original plus each edit) is kept in order in `src/lib/paragraph-edits.ts`,
+  so a future "undo" only needs to pop the latest entry off a paragraph's
+  history — there's no undo button yet, just the history to support one.
 
 Note: OCR downloads its recognition engine and language data from a CDN the
 first time it runs in a given browser, so it requires normal internet access
@@ -74,6 +80,9 @@ on the client.
   paragraph, that a large vertical gap starts a new one, and that
   Tesseract's own paragraph blocks are flattened correctly for the OCR
   path.
+- `paragraph-edits.test.ts` checks the per-paragraph edit history: it seeds
+  one history per paragraph with the original text, appends new edits
+  immutably, and reports the current (latest) text for a paragraph.
 
 ## Deployment
 
