@@ -12,15 +12,19 @@
 
 html {
   height: 100%;
+  /* Both axes set here (not just overflow-x on html/body) so html is the
+     one unambiguous scroll container. Per the overflow spec, an element
+     with one axis "visible" and the other not gets that axis force-upgraded
+     to "auto" - if body also carried overflow-x: hidden, body would
+     silently become a second scroll container with the same trick, which
+     breaks `position: sticky` on its descendants (they bind to body's
+     non-scrolling box instead of html's, so they never appear to stick). */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
-html,
 body {
   max-width: 100vw;
-  overflow-x: hidden;
-}
-
-body {
   min-height: 100%;
   display: flex;
   flex-direction: column;

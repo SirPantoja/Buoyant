@@ -51,12 +51,19 @@ npm test        # run the test suite
   positions (`src/lib/render-pdf-pages.ts`); for a scanned PDF, they come
   directly from the paragraph regions Tesseract finds while recognizing the
   page (`src/lib/ocr.ts`).
-- Clicking a paragraph opens an edit panel to the side with a text box and a
-  "What are your edits?" button. Submitting replaces that paragraph's
-  display with the text you typed. Every version of a paragraph (the
-  original plus each edit) is kept in order in `src/lib/paragraph-edits.ts`,
-  so a future "undo" only needs to pop the latest entry off a paragraph's
-  history — there's no undo button yet, just the history to support one.
+- Clicking a paragraph opens an edit panel to the side with a "Submit
+  revisions" button at its top and a text box below it. Submitting replaces
+  that paragraph's display with the text you typed. Every version of a
+  paragraph (the original plus each edit) is kept in order in
+  `src/lib/paragraph-edits.ts`, so a future "undo" only needs to pop the
+  latest entry off a paragraph's history — there's no undo button yet, just
+  the history to support one.
+- The edit panel stays on screen as you scroll through a long PDF (it's
+  `position: sticky`, capped to the viewport height with its own internal
+  scroll for a long history list). This requires `html`/`body` to have
+  unambiguous overflow so the browser doesn't pick the wrong scroll
+  container for it — see the comment in `src/app/globals.css` for the
+  overflow-axis quirk that broke this at first.
 
 Note: OCR downloads its recognition engine and language data from a CDN the
 first time it runs in a given browser, so it requires normal internet access
