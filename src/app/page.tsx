@@ -1,18 +1,33 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { extractTextWithOcr, type OcrProgress } from "@/lib/ocr";
 import styles from "./page.module.css";
+
+type Source = "embedded" | "ocr";
 
 type UploadResult = {
   name: string;
   size: number;
+  text: string;
+  source: Source;
 };
+
+type UploadResponse = {
+  name: string;
+  size: number;
+  source: "embedded" | "ocr-required";
+  text: string | null;
+};
+
+type Status = "idle" | "uploading" | "ocr" | "success" | "error";
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [status, setStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
+  const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
+  const [ocrProgress, setOcrProgress] = useState<OcrProgress | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -27,27 +42,35 @@ export default function Home() {
     setStatus("uploading");
     setMessage(null);
     setResult(null);
-
-    const formData = new FormData();
-    formData.append("file", file);
+    setOcrProgress(null);
 
     try {
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
+      const formData = new FormData();
+      formData.append("file", file);
 
-      const data = await response.json();
+      const response = await fetch("/api/upload", { method: "POST", body: formData });
+      const data: UploadResponse & { error?: string } = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error ?? "Upload failed.");
       }
 
+      if (data.source === "embedded" && data.text !== null) {
+        setResult({ name: data.name, size: data.size, text: data.text, source: "embedded" });
+        setStatus("success");
+        return;
+      }
+
+      // No usable text layer, so this is likely a scan: run OCR in the browser.
+      setStatus("ocr");
+      const text = await extractTextWithOcr(file, setOcrProgress);
+      setResult({ name: data.name, size: data.size, text, source: "ocr" });
       setStatus("success");
-      setResult({ name: data.name, size: data.size });
     } catch (error) {
       setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Upload failed.");
+      setMessage(error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setOcrProgress(null);
     }
   }
 
@@ -57,20 +80,36 @@ export default function Home() {
         <h1>Upload a PDF</h1>
         <form onSubmit={handleSubmit} className={styles.form}>
           <input ref={inputRef} type="file" accept="application/pdf" />
-          <button type="submit" disabled={status === "uploading"}>
-            {status === "uploading" ? "Uploading..." : "Upload"}
+          <button type="submit" disabled={status === "uploading" || status === "ocr"}>
+            {status === "uploading"
+              ? "Uploading..."
+              : status === "ocr"
+                ? "Running OCR..."
+                : "Upload"}
           </button>
         </form>
 
-        {status === "success" && result && (
+        {status === "ocr" && ocrProgress && (
           <p role="status">
-            Uploaded <strong>{result.name}</strong> ({formatBytes(result.size)})
+            {ocrProgress.status === "rendering" ? "Rendering" : "Reading"} page{" "}
+            {ocrProgress.page} of {ocrProgress.totalPages}...
           </p>
         )}
+
         {status === "error" && message && (
           <p role="alert" className={styles.error}>
             {message}
           </p>
+        )}
+
+        {status === "success" && result && (
+          <div className={styles.result}>
+            <p role="status">
+              Read <strong>{result.name}</strong> ({formatBytes(result.size)}) using{" "}
+              {result.source === "embedded" ? "its embedded text layer" : "OCR"}.
+            </p>
+            <pre className={styles.text}>{result.text || "(no text found)"}</pre>
+          </div>
         )}
       </main>
     </div>
