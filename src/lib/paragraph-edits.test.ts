@@ -14,7 +14,16 @@ function page(paragraphTexts: string[]): RenderedPage {
     dataUrl: "data:image/png;base64,",
     width: 100,
     height: 100,
-    paragraphs: paragraphTexts.map((text) => ({ text, x: 0, y: 0, width: 10, height: 10 })),
+    paragraphs: paragraphTexts.map((text) => ({
+      text,
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      fontFamily: "sans-serif",
+      fontSize: 12,
+      color: "rgb(0, 0, 0)",
+    })),
   };
 }
 

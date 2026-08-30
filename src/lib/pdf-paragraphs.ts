@@ -1,9 +1,14 @@
+import type { RgbColor } from "./sample-color";
+
 export type ParagraphBox = {
   text: string;
   x: number;
   y: number;
   width: number;
   height: number;
+  fontFamily: string;
+  fontSize: number;
+  color: string;
 };
 
 // A single rendered PDF page, ready to display with clickable/hoverable
@@ -15,16 +20,19 @@ export type RenderedPage = {
   paragraphs: ParagraphBox[];
 };
 
-type TextItemLike = {
-  str: string;
-  transform: number[];
-  width: number;
-  height: number;
-  hasEOL: boolean;
-};
-
-type ViewportLike = {
-  convertToViewportRectangle(rect: number[]): number[];
+// One line of text, already positioned in a shared top-left-origin pixel
+// space (viewport pixels for an embedded text layer, canvas pixels for
+// OCR), carrying the style info used both to decide where a paragraph
+// should split and to render its eventual edited-text overlay.
+export type StyledLine = {
+  text: string;
+  xMin: number;
+  xMax: number;
+  yMin: number;
+  yMax: number;
+  fontFamily: string;
+  fontSize: number;
+  color: RgbColor;
 };
 
 function median(values: number[]): number {
@@ -33,115 +41,124 @@ function median(values: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
-// Groups a page's text items (as returned by pdf.js's getTextContent) into
-// lines using each item's hasEOL flag, then groups consecutive lines into
-// paragraphs wherever the gap between baselines is much larger than a
-// normal line-height. There's no "paragraph" concept in the PDF text
-// stream, so this is a heuristic, not an exact structural read.
-export function groupTextItemsIntoParagraphs(
-  items: TextItemLike[],
-  viewport: ViewportLike,
-): ParagraphBox[] {
-  const lines: TextItemLike[][] = [];
-  let currentLine: TextItemLike[] = [];
+// How far apart two font sizes can be (as a ratio) before they count as
+// "different". Pixel-derived sizes vary slightly line to line even within
+// one run of text, so this isn't 1.0.
+const FONT_SIZE_CHANGE_RATIO = 1.2;
 
-  for (const item of items) {
-    // pdf.js marks a line break with a trailing empty-string item whose own
-    // position belongs to the *next* line, so it must not contribute to
-    // this line's geometry - only real text does.
-    if (item.str.length > 0) {
-      currentLine.push(item);
-    }
-    if (item.hasEOL && currentLine.length > 0) {
-      lines.push(currentLine);
-      currentLine = [];
-    }
+// How far apart two sampled colors can be (Euclidean RGB distance) before
+// they count as "different". Sampling real pixels means anti-aliasing and
+// compression noise can shift the same visual color by a few units between
+// lines, so this isn't 0.
+const COLOR_DISTANCE_THRESHOLD = 60;
+
+function colorsClose(a: RgbColor, b: RgbColor): boolean {
+  const distance = Math.sqrt((a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2);
+  return distance <= COLOR_DISTANCE_THRESHOLD;
+}
+
+function sameStyle(a: StyledLine, b: StyledLine): boolean {
+  if (a.fontFamily !== b.fontFamily) {
+    return false;
   }
-  if (currentLine.length > 0) {
-    lines.push(currentLine);
+  if (!colorsClose(a.color, b.color)) {
+    return false;
   }
+  const ratio = a.fontSize > b.fontSize ? a.fontSize / b.fontSize : b.fontSize / a.fontSize;
+  return ratio <= FONT_SIZE_CHANGE_RATIO;
+}
 
-  const lineBoxes = lines
-    .map((lineItems) => {
-      const text = lineItems
-        .map((i) => i.str)
-        .join("")
-        .trim();
-      const baseline = lineItems[0].transform[5];
-      return {
-        text,
-        baseline,
-        xMin: Math.min(...lineItems.map((i) => i.transform[4])),
-        xMax: Math.max(...lineItems.map((i) => i.transform[4] + i.width)),
-        yMin: Math.min(...lineItems.map((i) => i.transform[5])),
-        yMax: Math.max(...lineItems.map((i) => i.transform[5] + i.height)),
-      };
-    })
-    .filter((line) => line.text.length > 0);
-
-  if (lineBoxes.length === 0) {
+// Groups lines into paragraphs: a large vertical gap OR a change in font
+// family, size, or color starts a new paragraph, so a visually distinct
+// run of text (a heading before body text, a bolded aside, a colored
+// callout) becomes its own hoverable/editable region even when it isn't
+// separated by extra whitespace. Neither a PDF's text layer nor Tesseract
+// marks "paragraph" boundaries explicitly, so this is a heuristic.
+export function groupLinesIntoParagraphs(lines: StyledLine[]): ParagraphBox[] {
+  if (lines.length === 0) {
     return [];
   }
 
-  const medianLineHeight = median(lineBoxes.map((l) => l.yMax - l.yMin)) || 1;
-  const paragraphBreakGap = medianLineHeight * 1.6;
+  const medianLineHeight = median(lines.map((l) => l.yMax - l.yMin)) || 1;
+  const paragraphBreakGap = medianLineHeight * 0.8;
 
-  const paragraphs: (typeof lineBoxes)[] = [];
-  let currentParagraph: typeof lineBoxes = [];
+  const paragraphs: StyledLine[][] = [];
+  let current: StyledLine[] = [];
 
-  for (const line of lineBoxes) {
-    const prev = currentParagraph[currentParagraph.length - 1];
-    if (prev && Math.abs(prev.baseline - line.baseline) > paragraphBreakGap) {
-      paragraphs.push(currentParagraph);
-      currentParagraph = [];
+  for (const line of lines) {
+    const prev = current[current.length - 1];
+    if (prev && (line.yMin - prev.yMax > paragraphBreakGap || !sameStyle(prev, line))) {
+      paragraphs.push(current);
+      current = [];
     }
-    currentParagraph.push(line);
+    current.push(line);
   }
-  if (currentParagraph.length > 0) {
-    paragraphs.push(currentParagraph);
-  }
+  paragraphs.push(current);
 
-  return paragraphs.map((paragraphLines) => {
-    const text = paragraphLines.map((l) => l.text).join(" ");
-    const xMin = Math.min(...paragraphLines.map((l) => l.xMin));
-    const xMax = Math.max(...paragraphLines.map((l) => l.xMax));
-    const yMin = Math.min(...paragraphLines.map((l) => l.yMin));
-    const yMax = Math.max(...paragraphLines.map((l) => l.yMax));
-
-    const [vx1, vy1, vx2, vy2] = viewport.convertToViewportRectangle([xMin, yMin, xMax, yMax]);
+  return paragraphs.map((linesInParagraph) => {
+    const text = linesInParagraph.map((l) => l.text).join(" ");
+    const xMin = Math.min(...linesInParagraph.map((l) => l.xMin));
+    const xMax = Math.max(...linesInParagraph.map((l) => l.xMax));
+    const yMin = Math.min(...linesInParagraph.map((l) => l.yMin));
+    const yMax = Math.max(...linesInParagraph.map((l) => l.yMax));
+    const { fontFamily, fontSize, color } = linesInParagraph[0];
 
     return {
       text,
-      x: Math.min(vx1, vx2),
-      y: Math.min(vy1, vy2),
-      width: Math.abs(vx2 - vx1),
-      height: Math.abs(vy2 - vy1),
+      x: xMin,
+      y: yMin,
+      width: xMax - xMin,
+      height: yMax - yMin,
+      fontFamily,
+      fontSize,
+      color: `rgb(${color.r}, ${color.g}, ${color.b})`,
     };
   });
 }
 
 type TesseractBbox = { x0: number; y0: number; x1: number; y1: number };
-type TesseractParagraph = { text: string; bbox: TesseractBbox };
+type TesseractLine = { text: string; bbox: TesseractBbox };
+type TesseractParagraph = { text: string; bbox: TesseractBbox; lines: TesseractLine[] };
 type TesseractBlock = { paragraphs: TesseractParagraph[] };
 type TesseractPageLike = { blocks: TesseractBlock[] | null };
 
-// Tesseract already segments a recognized page into paragraphs with pixel
-// bounding boxes (in the same coordinate space as the image it was given),
-// so the OCR path just needs flattening into our shared shape.
-export function extractOcrParagraphs(page: TesseractPageLike): ParagraphBox[] {
+type SampleColorFn = (xMin: number, xMax: number, yMin: number, yMax: number) => RgbColor;
+
+// Tesseract's own font-family guesses per word are unreliable enough
+// (frequently wrong or inconsistent between adjacent lines of the same
+// font) that splitting on them would fragment paragraphs that are
+// visually uniform, so every OCR line shares this placeholder font family
+// and only its size and sampled color drive splitting.
+const OCR_FONT_FAMILY = "sans-serif";
+
+function linesFromTesseractParagraph(paragraph: TesseractParagraph, sampleColor: SampleColorFn): StyledLine[] {
+  return paragraph.lines
+    .filter((line) => line.text.trim().length > 0)
+    .map((line) => {
+      const { x0, y0, x1, y1 } = line.bbox;
+      return {
+        text: line.text.trim(),
+        xMin: x0,
+        xMax: x1,
+        yMin: y0,
+        yMax: y1,
+        fontFamily: OCR_FONT_FAMILY,
+        fontSize: y1 - y0,
+        color: sampleColor(x0, x1, y0, y1),
+      };
+    });
+}
+
+// Tesseract already segments a recognized page into paragraphs, but a
+// "paragraph" there is just a block of visually close lines - it doesn't
+// account for a font/size/color change partway through, so each one is
+// re-split the same way as the embedded-text-layer path.
+export function extractOcrParagraphs(page: TesseractPageLike, sampleColor: SampleColorFn): ParagraphBox[] {
   if (!page.blocks) {
     return [];
   }
 
   return page.blocks.flatMap((block) =>
-    block.paragraphs
-      .filter((paragraph) => paragraph.text.trim().length > 0)
-      .map((paragraph) => ({
-        text: paragraph.text.trim(),
-        x: paragraph.bbox.x0,
-        y: paragraph.bbox.y0,
-        width: paragraph.bbox.x1 - paragraph.bbox.x0,
-        height: paragraph.bbox.y1 - paragraph.bbox.y0,
-      })),
+    block.paragraphs.flatMap((paragraph) => groupLinesIntoParagraphs(linesFromTesseractParagraph(paragraph, sampleColor))),
   );
 }

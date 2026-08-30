@@ -1,4 +1,5 @@
 import { extractOcrParagraphs, type RenderedPage } from "./pdf-paragraphs";
+import { sampleTextColor } from "./sample-color";
 
 export type OcrProgress = {
   page: number;
@@ -73,13 +74,19 @@ export async function renderPdfWithOcr(
       async (canvas) => {
         const htmlCanvas = canvas as HTMLCanvasElement;
         const { data } = await worker.recognize(htmlCanvas);
+        const context = htmlCanvas.getContext("2d");
+        if (!context) {
+          throw new Error("Could not create a canvas context for OCR.");
+        }
 
         return {
           text: data.text.trim(),
           dataUrl: htmlCanvas.toDataURL("image/png"),
           width: htmlCanvas.width,
           height: htmlCanvas.height,
-          paragraphs: extractOcrParagraphs(data),
+          paragraphs: extractOcrParagraphs(data, (xMin, xMax, yMin, yMax) =>
+            sampleTextColor(context, xMin, xMax, yMin, yMax),
+          ),
         };
       },
       onProgress,
