@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { PDFParse } from "pdf-parse";
+import { extractPdfText } from "@/lib/extract-pdf-text";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
-const MIN_EMBEDDED_TEXT_LENGTH = 20;
 
 export async function POST(request: Request) {
   let formData: FormData;
@@ -27,27 +26,17 @@ export async function POST(request: Request) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const parser = new PDFParse({ data: buffer });
 
-  let text: string;
+  let result: Awaited<ReturnType<typeof extractPdfText>>;
   try {
-    const result = await parser.getText({ pageJoiner: "" });
-    text = result.text.trim();
+    result = await extractPdfText(buffer);
   } catch (err) {
     console.error("pdf-parse failed", err);
     return NextResponse.json(
       { error: "Could not read this PDF. It may be corrupted or password-protected." },
       { status: 400 },
     );
-  } finally {
-    await parser.destroy();
   }
 
-  // A PDF with little to no embedded text is likely a scan/image, so it
-  // needs OCR instead of the text layer pdf-parse just tried to read.
-  if (text.length < MIN_EMBEDDED_TEXT_LENGTH) {
-    return NextResponse.json({ name: file.name, size: file.size, source: "ocr-required", text: null });
-  }
-
-  return NextResponse.json({ name: file.name, size: file.size, source: "embedded", text });
+  return NextResponse.json({ name: file.name, size: file.size, ...result });
 }
