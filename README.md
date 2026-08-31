@@ -3,6 +3,8 @@
 A Next.js + TypeScript app for uploading a PDF and revising it paragraph by
 paragraph with AI.
 
+Link to a live URL: https://buoyant-sigma.vercel.app/
+
 ## Setup & run instructions
 
 **Prerequisites:** [Node.js](https://nodejs.org/) 20 or later and npm.
