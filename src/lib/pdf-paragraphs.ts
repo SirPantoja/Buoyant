@@ -53,11 +53,12 @@ function fontSizesClose(a: number, b: number): boolean {
 
 // How far apart two sampled colors can be (as a Euclidean RGB distance)
 // before they count as "different". Colors come from pixel sampling
-// rather than an exact declared value, so small noise between two lines
-// of the same intended color shouldn't trigger a split - but a genuine
-// color change (e.g. black body text to a red callout) is far larger
-// than that noise.
-const COLOR_DISTANCE_THRESHOLD = 40;
+// rather than an exact declared value, and that sampling can land on
+// noticeably different shades of what's really the same ink (JPEG
+// artifacts on a scanned page, anti-aliasing, etc.), so this is generous
+// - a genuine color change (e.g. black body text to a red callout) is
+// still far larger than this.
+const COLOR_DISTANCE_THRESHOLD = 90;
 
 function colorsClose(a: RgbColor, b: RgbColor): boolean {
   return Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b) <= COLOR_DISTANCE_THRESHOLD;

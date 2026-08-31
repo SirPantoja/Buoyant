@@ -74,12 +74,14 @@ npm test        # run the test suite
   clean PDF's. The chosen value sits with margin on both sides of both
   documents' numbers, favoring the tighter document since a looser value
   misses most of its real breaks. The color threshold
-  (`COLOR_DISTANCE_THRESHOLD`) is a Euclidean RGB distance loose enough to
-  absorb sampling noise between lines of the same intended color, but far
-  tighter than the distance between genuinely different colors like black
-  and red. Font family is only used to style an edited paragraph's
-  overlay text (so a confirmed edit keeps looking like it belongs in that
-  PDF rather than in a generic box), not to decide where to split.
+  (`COLOR_DISTANCE_THRESHOLD`) is a Euclidean RGB distance generous enough
+  to absorb sampling noise between lines of the same intended color (e.g.
+  JPEG artifacts or anti-aliasing shifting a scanned page's black text
+  toward gray), but still far tighter than the distance between genuinely
+  different colors like black and red. Font family is only used to style
+  an edited paragraph's overlay text (so a confirmed edit keeps looking
+  like it belongs in that PDF rather than in a generic box), not to
+  decide where to split.
 - Clicking a paragraph opens an edit panel to the side with "Submit
   revisions" and "Undo" buttons at its top and a text box below them, where
   you describe the edit you want. Submitting sends that instruction to

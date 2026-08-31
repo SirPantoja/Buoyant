@@ -83,9 +83,12 @@ describe("groupLinesIntoParagraphs", () => {
   });
 
   it("does not split on color sampling noise from rendering/recognition", () => {
+    // Distinctly different shades of what's meant to be the same black
+    // ink - well beyond the small noise checked in earlier revisions of
+    // this test, but still nowhere near a genuinely different color.
     const lines = [
       line({ text: "First line", yMin: 0, yMax: 12, color: { r: 10, g: 10, b: 10 } }),
-      line({ text: "Second line", yMin: 13, yMax: 25, color: { r: 25, g: 18, b: 20 } }),
+      line({ text: "Second line", yMin: 13, yMax: 25, color: { r: 60, g: 60, b: 60 } }),
     ];
 
     const paragraphs = groupLinesIntoParagraphs(lines);
