@@ -63,9 +63,20 @@ Surely our users would have other file types other than PDFs. It would be good t
 I wanted to have a similar feature to multi paragraphs where users can just have the AI review their entire documents in one go. I skipped this because it might be more expensive token-wise and would take some time to fine tune and get right especially without the knowledge base.
 ### Collaborative Editing
 Right now, only one user can edit a document at a time. What if multiple users could collaboratively edit the document in real time? Due to time constraints and overall complexity of real time editing (race conditions and merge conflicts) I cut this.
+### Caching
+If a user is consistently sending the same PDF, it would be nice if they didn't have to wait for upload. I cut this because I don't anticipate many users submitting the same thing over and over again like me./
 ## Failure modes I worried about
 There are some constraints put on by the frameworks we are using on file size. PDFs that are really large might give us memory issues or even just issues in transporting from the users computer. In fact, I ran into some of these with the test files given because of limits in Vercel but this was fixed by manually upping the max (though there is still a max). Another issue is failures in calling the model APIs (we cannot always assume the APIs will be successful, their servers could go down, we run out of tokens) and using the Resend APIs. For these things, I would have production monitoring and substantive integration tests. I would always test API failures cases and handle them gracefully that inform the user that we are having problems in a UX friendly way (ie Open AI is not responding to our calls, please be patient).
 ## How I'd evaluate this
+There are a few ways to evaluate.
+1. We could have a production monitoring system that tracks system health signals like crashes and ANRs over time to detect regressions
+2. We could measure how often users go through critical journeys (in our case, finishing the flow and sending an email) and tracking this over time
+3. We could measure start up time and measure this over time to track regressions
+4. We could measure PDF parsing time to UI rendering
+Empirical Measurements:
+1st Run: 2.83 2nd Run:2.25 3rd Run: 2.05 4th Run: 2.08 5th Run: 2.06 Average: 2.254
+In general, this seems pretty slow and there could be lots of room for improvement. Between better parsing algorithms and optimizing our UI rendering we could improve a lot here and iterate.
+5. We could measure our API calls and consider swapping them out for more efficient or performant ones
 ## What I added beyond the brief and why
 ### Undo Behavior & Retries
 The specs said try undo if possible and so I tried to make it possible by designing it so that each paragraph had a list of edits that were applied sequentially. This made popping out the last one very easy. I did this because as a user undo would be critical if the AI hallucinated. I also added convenient retry and retry with edits buttons because of the non deterministic behaviors of AI and so this would make a huge difference to users.
