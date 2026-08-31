@@ -1,14 +1,19 @@
 .page {
-  --background: #f6f8f8;
-  --foreground: #fff;
+  /* Matches the logo's own background (sampled from public/logo.png:
+     solid black with a soft blue glow) rather than following the
+     visitor's light/dark system preference, so the page reads as one
+     piece with the mark instead of the logo sitting in its own black
+     square against a light card. */
+  --background: #000;
+  --foreground: #101319;
 
-  --text-primary: #0f1417;
-  --text-secondary: #667085;
-  --border: #e5e9eb;
-  --error: #c0392b;
-  --accent: #0f766e;
-  --accent-soft: #e6f4f2;
-  --edited-border: #c9821a;
+  --text-primary: #f5f6fa;
+  --text-secondary: #8b93a7;
+  --border: #232838;
+  --error: #ff6b6b;
+  --accent: #7292d0;
+  --accent-soft: #1b2338;
+  --edited-border: #e3a53f;
 
   display: flex;
   min-height: 100vh;
@@ -25,25 +30,32 @@
 
 .brandRow {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  align-items: flex-start;
+  gap: 20px;
   width: 100%;
-  max-width: 480px;
-  margin-bottom: 28px;
-  padding: 0 8px;
+  max-width: 900px;
+  margin-bottom: 36px;
+  padding: 0 24px;
 }
 
 .logoMark {
-  width: 36px;
-  height: 36px;
+  width: 64px;
+  height: 64px;
   flex-shrink: 0;
-  color: var(--accent);
+  /* The source image is only 42x43, so this is already close to its
+     natural size rather than a large upscale that would blur it. */
+  margin-top: 4px;
 }
 
 .title {
   margin: 0;
-  font-size: 20px;
-  font-weight: 600;
+  /* Deliberately huge - scales from 40px up to 96px with the viewport so
+     it reads as a page-filling hero headline rather than a small app
+     title, wrapping across lines on anything but a very wide screen. */
+  font-size: clamp(2.5rem, 7vw, 6rem);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  font-weight: 700;
   color: var(--text-primary);
 }
 
@@ -58,7 +70,10 @@
   padding: 48px;
   border-radius: 16px;
   border: 1px solid var(--border);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 16px rgba(16, 24, 40, 0.06);
+  /* A soft blue glow instead of the drop shadow a light card would use -
+     against solid black there's nothing for a dark shadow to show up
+     against, so this echoes the logo's own glow instead. */
+  box-shadow: 0 0 60px rgba(114, 140, 208, 0.1);
   color: var(--text-primary);
 }
 
@@ -76,13 +91,17 @@
 }
 
 .form button {
-  padding: 10px 20px;
-  border-radius: 8px;
+  padding: 18px 36px;
+  border-radius: 10px;
   border: 1px solid var(--accent);
   background: var(--accent);
   color: #fff;
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 600;
+  /* Matches the title's much bigger scale, so the one action on the page
+     reads as a bold, obvious call to action rather than a small default
+     button. */
+  font-size: 20px;
 }
 
 .form button:disabled {
@@ -372,19 +391,4 @@
   display: block;
   font-weight: 600;
   color: var(--text-secondary);
-}
-
-@media (prefers-color-scheme: dark) {
-  .page {
-    --background: #000;
-    --foreground: #000;
-
-    --text-primary: #ededed;
-    --text-secondary: #999;
-    --border: #1a1a1a;
-    --error: #ff6b5e;
-    --accent: #4fbdb0;
-    --accent-soft: #0f2b28;
-    --edited-border: #e3a53f;
-  }
 }

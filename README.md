@@ -33,12 +33,18 @@ npm test        # run the test suite
 
 ## How it works
 
-- `src/app/page.tsx` renders the "Buoyant AI Proposal Revising" header (with
-  a placeholder logo mark, `BuoyantLogo`, standing in for the real one) and
-  a file picker restricted to PDFs, up to a 50 MB sanity limit. The chosen
-  file never leaves the browser as a whole HTTP request body - see below -
-  so this limit exists only to keep an accidental huge upload from
-  stalling the page, not to work around a server-side ceiling.
+- `src/app/page.tsx` renders the "Buoyant AI Proposal Revising" header
+  (`public/logo.png`) and a file picker restricted to PDFs, up to a 50 MB
+  sanity limit. The chosen file never leaves the browser as a whole HTTP
+  request body - see below - so this limit exists only to keep an
+  accidental huge upload from stalling the page, not to work around a
+  server-side ceiling.
+- The page's whole color palette (`src/app/page.module.css`) is built
+  around the logo itself rather than the visitor's light/dark system
+  preference: solid black background and a muted blue accent, both
+  sampled directly from the logo image's own background and glow, so the
+  mark sits on the page as if it belongs there instead of in its own
+  little box.
 - `src/lib/detect-embedded-text.ts` reads the PDF's embedded text layer
   entirely client-side with [`pdfjs-dist`](https://www.npmjs.com/package/pdfjs-dist)
   (`page.getTextContent()` on every page) to decide whether it's a normal
