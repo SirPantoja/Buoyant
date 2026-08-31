@@ -150,6 +150,15 @@ npm test        # run the test suite
   unambiguous overflow so the browser doesn't pick the wrong scroll
   container for it — see the comment in `src/app/globals.css` for the
   overflow-axis quirk that broke this at first.
+- Below the viewer, an email field lets you send yourself a copy of the
+  edited PDF. Submitting it posts the address to `/api/send-pdf`
+  (`src/lib/send-pdf-request.ts`), which is meant to eventually build the
+  edited PDF and email it through a real provider (e.g. Resend, SendGrid),
+  but for now runs `sendPdfEmail` (`src/lib/send-pdf-email.ts`) — a
+  stand-in that waits ~1.5 seconds and always succeeds, the same pattern
+  `generate-revision.ts` uses for the AI stand-in above. The email address
+  is validated both by the input's own `type="email"` and again on the
+  server before the stand-in runs.
 
 Note: OCR downloads its recognition engine and language data from a CDN the
 first time it runs in a given browser, so it requires normal internet access
@@ -205,6 +214,13 @@ on the client.
   that a response whose body isn't valid JSON (a gateway timeout, a
   platform-level rejection) throws a plain error instead of crashing on
   the failed parse.
+- `send-pdf-email.test.ts` checks the dummy email-sending stand-in
+  resolves only after the simulated delay (using fake timers).
+- `send-pdf-request.test.ts` checks the client-side request helper posts
+  the email address to `/api/send-pdf`, that it surfaces the server's
+  error message on failure, and that a non-JSON response throws a plain
+  error instead of crashing on the failed parse - the same three cases as
+  `revise-paragraph.test.ts`, for the same reasons.
 
 ## Deployment
 
