@@ -1,5 +1,5 @@
 import { extractOcrParagraphs, type RenderedPage } from "./pdf-paragraphs";
-import { sampleTextColor } from "./sample-color";
+import { sampleBackgroundColor, sampleTextColor } from "./sample-color";
 
 export type OcrProgress = {
   page: number;
@@ -87,8 +87,10 @@ export async function renderPdfWithOcr(
           dataUrl: htmlCanvas.toDataURL("image/png"),
           width: htmlCanvas.width,
           height: htmlCanvas.height,
-          paragraphs: extractOcrParagraphs(data, (xMin, xMax, yMin, yMax) =>
-            sampleTextColor(context, xMin, xMax, yMin, yMax),
+          paragraphs: extractOcrParagraphs(
+            data,
+            (xMin, xMax, yMin, yMax) => sampleTextColor(context, xMin, xMax, yMin, yMax),
+            (xMin, xMax, yMin, yMax) => sampleBackgroundColor(context, xMin, xMax, yMin, yMax),
           ),
         };
       },

@@ -239,8 +239,32 @@ export default function Home() {
                   const boxStyle = {
                     left: `${(paragraph.x / page.width) * 100}%`,
                     top: `${(paragraph.y / page.height) * 100}%`,
-                    width: `${(paragraph.width / page.width) * 100}%`,
-                    height: `${(paragraph.height / page.height) * 100}%`,
+                    // An edited paragraph gets width/height *floors* rather
+                    // than a fixed size: `fit-content` first grows the box
+                    // sideways to fit replacement text that still reads as
+                    // one line, up to the page's right edge (maxWidth), and
+                    // only wraps - growing the box downward instead, via
+                    // minHeight - once it hits that edge. So a short
+                    // replacement widens in place, and only a long one
+                    // reflows and grows vertically, rather than every edit
+                    // immediately wrapping and needing a scrollbar.
+                    ...(edited
+                      ? {
+                          width: "fit-content",
+                          minWidth: `${(paragraph.width / page.width) * 100}%`,
+                          maxWidth: `${((page.width - paragraph.x) / page.width) * 100}%`,
+                          minHeight: `${(paragraph.height / page.height) * 100}%`,
+                        }
+                      : {
+                          width: `${(paragraph.width / page.width) * 100}%`,
+                          height: `${(paragraph.height / page.height) * 100}%`,
+                        }),
+                    // Matches the page background sampled from behind the
+                    // original text, rather than a plain highlight color, so
+                    // the edit blends into the page. Set here (inline) rather
+                    // than in CSS so it also always wins over the generic
+                    // hover tint below, whether hovered or not.
+                    ...(edited ? { backgroundColor: paragraph.backgroundColor } : {}),
                   };
                   // Sized in container-width units (relative to the page
                   // image's own rendered width, via `.pageWrapper`'s

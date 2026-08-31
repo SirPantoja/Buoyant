@@ -10,7 +10,6 @@
   --badge-embedded-text: #0b5fa5;
   --badge-ocr-bg: #f1e6ff;
   --badge-ocr-text: #6a3fb5;
-  --edited-bg: #fff6e0;
   --edited-border: #c9821a;
 
   display: flex;
@@ -168,17 +167,20 @@
 }
 
 .paragraphBoxEdited {
-  background: var(--edited-bg);
-  border-color: var(--edited-border);
-  overflow: auto;
+  /* Background is set inline per paragraph (the page color sampled from
+     behind the original text), not here, so the edit blends into the
+     page instead of sitting in a plain highlight box. No border color
+     here either - an edited paragraph should look like a normal part of
+     the page until you interact with it, not stay permanently outlined. */
+  overflow: visible;
   padding: 2px 4px;
 }
 
-/* Edited paragraphs cover the original page image, so hovering must keep
-   that background opaque - the generic hover's translucent tint would
-   otherwise let the original text show through underneath. */
+/* Amber instead of the generic hover's blue, so hovering still tells an
+   edited paragraph apart from an unedited one - the background itself
+   doesn't need an override here since it's set inline and always wins
+   over this rule's translucent tint anyway. */
 .paragraphBoxEdited:hover {
-  background-color: var(--edited-bg);
   border-color: var(--edited-border);
 }
 
@@ -390,7 +392,6 @@
     --badge-embedded-text: #7cc0f5;
     --badge-ocr-bg: #2c1f40;
     --badge-ocr-text: #c9a8f5;
-    --edited-bg: #3a2c0d;
     --edited-border: #e3a53f;
   }
 }
