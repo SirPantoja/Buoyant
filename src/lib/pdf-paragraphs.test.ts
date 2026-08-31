@@ -1,90 +1,208 @@
 import { describe, expect, it } from "vitest";
-import { extractOcrParagraphs, groupTextItemsIntoParagraphs } from "./pdf-paragraphs";
+import { extractOcrParagraphs, groupLinesIntoParagraphs, type StyledLine } from "./pdf-paragraphs";
+import type { RgbColor } from "./sample-color";
 
-// A pass-through viewport: PDF-space coordinates are already what we want
-// to assert on, so the tests can reason about them directly.
-const identityViewport = {
-  convertToViewportRectangle: (rect: number[]) => rect,
-};
+const black: RgbColor = { r: 10, g: 10, b: 10 };
+const red: RgbColor = { r: 200, g: 20, b: 20 };
 
-function textItem(str: string, x: number, y: number, width: number, height: number, hasEOL: boolean) {
-  return { str, transform: [1, 0, 0, 1, x, y], width, height, hasEOL };
+function line(overrides: Partial<StyledLine> & Pick<StyledLine, "text" | "yMin" | "yMax">): StyledLine {
+  return {
+    xMin: 0,
+    xMax: 100,
+    fontFamily: "sans-serif",
+    fontSize: 12,
+    color: black,
+    ...overrides,
+  };
 }
 
-describe("groupTextItemsIntoParagraphs", () => {
-  it("joins items on the same line and keeps close lines in one paragraph", () => {
-    const items = [
-      // Line 1
-      textItem("Hello ", 0, 100, 30, 10, false),
-      textItem("world", 30, 100, 25, 10, true),
-      // Line 2, close enough to line 1 to be the same paragraph
-      textItem("Second line", 0, 88, 60, 10, true),
-    ];
+describe("groupLinesIntoParagraphs", () => {
+  it("merges consecutive lines with a normal same-paragraph gap", () => {
+    const lines = [line({ text: "First line", yMin: 0, yMax: 12 }), line({ text: "Second line", yMin: 16, yMax: 28 })];
 
-    const paragraphs = groupTextItemsIntoParagraphs(items, identityViewport);
+    const paragraphs = groupLinesIntoParagraphs(lines);
 
     expect(paragraphs).toHaveLength(1);
-    expect(paragraphs[0].text).toBe("Hello world Second line");
+    expect(paragraphs[0].text).toBe("First line Second line");
   });
 
-  it("starts a new paragraph after a large vertical gap", () => {
-    const items = [
-      textItem("First paragraph", 0, 200, 80, 10, true),
-      // Large gap below (normal line gap here is ~12, this is 40)
-      textItem("Second paragraph", 0, 160, 90, 10, true),
-    ];
+  it("splits at a gap as small as the smallest real paragraph break measured on a scanned document", () => {
+    // ~1.0x line height, the smallest gap-to-height ratio measured at an
+    // actual paragraph break on a real scanned page run through OCR - the
+    // threshold has to catch this, not just larger, more obvious gaps.
+    const lines = [line({ text: "First paragraph", yMin: 0, yMax: 12 }), line({ text: "Second paragraph", yMin: 24, yMax: 36 })];
 
-    const paragraphs = groupTextItemsIntoParagraphs(items, identityViewport);
+    const paragraphs = groupLinesIntoParagraphs(lines);
 
     expect(paragraphs).toHaveLength(2);
-    expect(paragraphs[0].text).toBe("First paragraph");
-    expect(paragraphs[1].text).toBe("Second paragraph");
+    expect(paragraphs.map((p) => p.text)).toEqual(["First paragraph", "Second paragraph"]);
   });
 
-  it("computes a bounding box covering every line in the paragraph", () => {
-    const items = [
-      textItem("Short", 10, 100, 20, 10, true),
-      textItem("A much longer second line", 10, 88, 70, 10, true),
+  it("splits after a gap clearly wider than normal line spacing", () => {
+    const lines = [line({ text: "First paragraph", yMin: 0, yMax: 12 }), line({ text: "Second paragraph", yMin: 42, yMax: 54 })];
+
+    const paragraphs = groupLinesIntoParagraphs(lines);
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs.map((p) => p.text)).toEqual(["First paragraph", "Second paragraph"]);
+  });
+
+  it("splits on a font size change even with no extra gap", () => {
+    const lines = [
+      line({ text: "Heading", yMin: 0, yMax: 16, fontSize: 20 }),
+      line({ text: "Body text", yMin: 17, yMax: 29, fontSize: 12 }),
     ];
 
-    const [paragraph] = groupTextItemsIntoParagraphs(items, identityViewport);
+    const paragraphs = groupLinesIntoParagraphs(lines);
 
-    expect(paragraph.x).toBe(10);
-    expect(paragraph.width).toBe(70);
-    expect(paragraph.y).toBe(88);
-    expect(paragraph.height).toBe(22); // from y=88 up to y=100+10=110
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs.map((p) => p.text)).toEqual(["Heading", "Body text"]);
   });
 
-  it("returns nothing for a page with no text", () => {
-    expect(groupTextItemsIntoParagraphs([], identityViewport)).toEqual([]);
+  it("does not split on a font family change alone", () => {
+    const lines = [
+      line({ text: "Body text", yMin: 0, yMax: 12, fontFamily: "serif" }),
+      line({ text: "Different font", yMin: 13, yMax: 25, fontFamily: "monospace" }),
+    ];
+
+    const paragraphs = groupLinesIntoParagraphs(lines);
+
+    expect(paragraphs).toHaveLength(1);
+  });
+
+  it("splits on a color change even with no extra gap or size change", () => {
+    const lines = [
+      line({ text: "Black text", yMin: 0, yMax: 12, color: black }),
+      line({ text: "Red text", yMin: 13, yMax: 25, color: red }),
+    ];
+
+    const paragraphs = groupLinesIntoParagraphs(lines);
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs.map((p) => p.text)).toEqual(["Black text", "Red text"]);
+  });
+
+  it("does not split on color sampling noise from rendering/recognition", () => {
+    // Distinctly different shades of what's meant to be the same black
+    // ink - well beyond the small noise checked in earlier revisions of
+    // this test, but still nowhere near a genuinely different color.
+    const lines = [
+      line({ text: "First line", yMin: 0, yMax: 12, color: { r: 10, g: 10, b: 10 } }),
+      line({ text: "Second line", yMin: 13, yMax: 25, color: { r: 78, g: 78, b: 78 } }),
+    ];
+
+    const paragraphs = groupLinesIntoParagraphs(lines);
+
+    expect(paragraphs).toHaveLength(1);
+  });
+
+  it("does not split on font-size noise from rendering/recognition", () => {
+    const lines = [
+      line({ text: "First line", yMin: 0, yMax: 12, fontSize: 12 }),
+      line({ text: "Second line", yMin: 13, yMax: 25, fontSize: 12.8 }),
+    ];
+
+    const paragraphs = groupLinesIntoParagraphs(lines);
+
+    expect(paragraphs).toHaveLength(1);
+  });
+
+  it("carries the first line's style onto the resulting paragraph, formatted as a CSS color", () => {
+    const lines = [line({ text: "Styled text", yMin: 0, yMax: 12, fontFamily: "serif", fontSize: 16, color: red })];
+
+    const [paragraph] = groupLinesIntoParagraphs(lines);
+
+    expect(paragraph.fontFamily).toBe("serif");
+    expect(paragraph.fontSize).toBe(16);
+    expect(paragraph.color).toBe("rgb(200, 20, 20)");
+  });
+
+  it("returns nothing for no lines", () => {
+    expect(groupLinesIntoParagraphs([])).toEqual([]);
   });
 });
 
 describe("extractOcrParagraphs", () => {
-  it("flattens Tesseract's blocks/paragraphs into paragraph boxes", () => {
+  const sampleColor = () => black;
+
+  it("flattens Tesseract's blocks/paragraphs/lines into paragraph boxes", () => {
     const page = {
       blocks: [
         {
           paragraphs: [
-            { text: "First paragraph\n", bbox: { x0: 0, y0: 0, x1: 100, y1: 20 } },
-            { text: "Second paragraph", bbox: { x0: 0, y0: 30, x1: 100, y1: 50 } },
+            {
+              text: "ignored",
+              bbox: { x0: 0, y0: 0, x1: 100, y1: 50 },
+              lines: [
+                { text: "First line", bbox: { x0: 0, y0: 0, x1: 100, y1: 20 } },
+                { text: "Second line", bbox: { x0: 0, y0: 22, x1: 100, y1: 42 } },
+              ],
+            },
           ],
-        },
-        {
-          paragraphs: [{ text: "  ", bbox: { x0: 0, y0: 60, x1: 100, y1: 80 } }],
         },
       ],
     };
 
-    const paragraphs = extractOcrParagraphs(page);
+    const paragraphs = extractOcrParagraphs(page, sampleColor);
 
-    expect(paragraphs).toEqual([
-      { text: "First paragraph", x: 0, y: 0, width: 100, height: 20 },
-      { text: "Second paragraph", x: 0, y: 30, width: 100, height: 20 },
-    ]);
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0].text).toBe("First line Second line");
+  });
+
+  it("splits a Tesseract paragraph further when its lines' sizes diverge", () => {
+    const page = {
+      blocks: [
+        {
+          paragraphs: [
+            {
+              text: "ignored",
+              bbox: { x0: 0, y0: 0, x1: 100, y1: 60 },
+              lines: [
+                { text: "Small line", bbox: { x0: 0, y0: 0, x1: 100, y1: 10 } },
+                { text: "Much bigger line", bbox: { x0: 0, y0: 11, x1: 100, y1: 40 } },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const paragraphs = extractOcrParagraphs(page, sampleColor);
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs.map((p) => p.text)).toEqual(["Small line", "Much bigger line"]);
+  });
+
+  it("splits a Tesseract paragraph further when its lines' colors diverge", () => {
+    const page = {
+      blocks: [
+        {
+          paragraphs: [
+            {
+              text: "ignored",
+              bbox: { x0: 0, y0: 0, x1: 100, y1: 42 },
+              lines: [
+                { text: "Black line", bbox: { x0: 0, y0: 0, x1: 100, y1: 20 } },
+                { text: "Red line", bbox: { x0: 0, y0: 22, x1: 100, y1: 42 } },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const colorForLine: Record<string, RgbColor> = {
+      "0,0": black,
+      "0,22": red,
+    };
+
+    const paragraphs = extractOcrParagraphs(page, (xMin, _xMax, yMin) => colorForLine[`${xMin},${yMin}`] ?? black);
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs.map((p) => p.text)).toEqual(["Black line", "Red line"]);
   });
 
   it("returns nothing when Tesseract found no blocks", () => {
-    expect(extractOcrParagraphs({ blocks: null })).toEqual([]);
+    expect(extractOcrParagraphs({ blocks: null }, sampleColor)).toEqual([]);
   });
 });

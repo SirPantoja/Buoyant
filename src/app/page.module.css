@@ -140,6 +140,10 @@
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--foreground);
+  /* Lets an edited paragraph's font-size be expressed in cqw units below,
+     so it scales with the page image's own rendered width rather than the
+     viewport's. */
+  container-type: inline-size;
 }
 
 .pageImage {
@@ -184,9 +188,9 @@
 
 .editedText {
   display: block;
-  font-size: 12px;
+  /* font-size and color are set inline per paragraph, to match the
+     original text's own font, size, and color. */
   line-height: 1.3;
-  color: var(--text-primary);
   white-space: pre-wrap;
 }
 

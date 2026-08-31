@@ -242,6 +242,15 @@ export default function Home() {
                     width: `${(paragraph.width / page.width) * 100}%`,
                     height: `${(paragraph.height / page.height) * 100}%`,
                   };
+                  // Sized in container-width units (relative to the page
+                  // image's own rendered width, via `.pageWrapper`'s
+                  // `container-type: inline-size`) so edited text keeps the
+                  // original's proportions as the page scales responsively.
+                  const editedTextStyle = {
+                    fontFamily: paragraph.fontFamily,
+                    color: paragraph.color,
+                    fontSize: `calc(${paragraph.fontSize} / ${page.width} * 100cqw)`,
+                  };
 
                   return (
                     <div
@@ -253,7 +262,11 @@ export default function Home() {
                       onClick={() => handleSelectParagraph(key)}
                       style={boxStyle}
                     >
-                      {edited && <span className={styles.editedText}>{currentText}</span>}
+                      {edited && (
+                        <span className={styles.editedText} style={editedTextStyle}>
+                          {currentText}
+                        </span>
+                      )}
                     </div>
                   );
                 })}

@@ -42,15 +42,46 @@ npm test        # run the test suite
   renders each page to a canvas with [`pdfjs-dist`](https://www.npmjs.com/package/pdfjs-dist)
   and reads the text off those images with [`tesseract.js`](https://www.npmjs.com/package/tesseract.js)
   (`src/lib/ocr.ts`). This runs entirely in the browser, so it needs no server
-  compute and works within Vercel's serverless limits.
+  compute and works within Vercel's serverless limits. `worker.recognize`
+  must be called with `{ blocks: true }` or Tesseract's result omits the
+  block/paragraph/line structure entirely (`data.blocks` comes back `null`),
+  which the paragraph-box feature below depends on.
 - Either way, the extracted text is displayed on the page once it's ready.
 - The browser also renders every page of the PDF as an image and overlays a
   box around each paragraph (`src/lib/pdf-paragraphs.ts`), so hovering over
   a paragraph on the page highlights it. For a PDF with an embedded text
   layer, the boxes come from grouping `pdfjs-dist`'s per-line text
   positions (`src/lib/render-pdf-pages.ts`); for a scanned PDF, they come
-  directly from the paragraph regions Tesseract finds while recognizing the
+  from the paragraph/line regions Tesseract finds while recognizing the
   page (`src/lib/ocr.ts`).
+- Each line also carries its font family, font size, and color, read from
+  `pdfjs-dist`'s text-layer metadata for an embedded-text PDF, or estimated
+  from line height for a scanned one; color comes from sampling the
+  rendered page's actual pixels (`src/lib/sample-color.ts`), since neither
+  source exposes fill color directly. Paragraphs split on any of three
+  signals: a line whose font size is clearly different from the line
+  before it (a heading immediately above body text), a vertical gap
+  before it that's clearly wider than normal line spacing (a blank line
+  between two paragraphs of the same size), or a clear color change (a
+  callout or highlighted line in the middle of otherwise same-sized,
+  normally-spaced text) — a font family change alone does not split. The
+  gap threshold (`GAP_TO_LINE_HEIGHT_RATIO` in `src/lib/pdf-paragraphs.ts`)
+  is calibrated against two real documents rather than guessed: a
+  digitally-generated multi-paragraph PDF, where within-paragraph gaps
+  measured well under the threshold and a genuine break well over it, and
+  a real scanned book page run through OCR, where genuine paragraph
+  breaks measured as low as ~1.0x a line's height, much tighter than the
+  clean PDF's. The chosen value sits with margin on both sides of both
+  documents' numbers, favoring the tighter document since a looser value
+  misses most of its real breaks. The color threshold
+  (`COLOR_DISTANCE_THRESHOLD`) is a Euclidean RGB distance generous enough
+  to absorb sampling noise between lines of the same intended color (e.g.
+  JPEG artifacts or anti-aliasing shifting a scanned page's black text
+  toward gray), but still far tighter than the distance between genuinely
+  different colors like black and red. Font family is only used to style
+  an edited paragraph's overlay text (so a confirmed edit keeps looking
+  like it belongs in that PDF rather than in a generic box), not to
+  decide where to split.
 - Clicking a paragraph opens an edit panel to the side with "Submit
   revisions" and "Undo" buttons at its top and a text box below them, where
   you describe the edit you want. Submitting sends that instruction to
@@ -60,11 +91,11 @@ npm test        # run the test suite
   always returns the fixed string `"this is an ai edit"`, so the request/
   loading/review flow is already real even though the "AI" isn't yet. While
   the request is in flight the panel shows a spinner; once a response comes
-  back you choose to **Confirm** it (applies to the paragraph), **Try
-  again** (resends the same instructions), or **Try again with edits**
-  (goes back to the text box, prefilled with what you typed, to revise your
-  instructions before resending) — nothing is applied to the paragraph
-  until you confirm.
+  back you choose to **Confirm** it (applies to the paragraph, styled to
+  match the original), **Try again** (resends the same instructions), or
+  **Try again with edits** (goes back to the text box, prefilled with what
+  you typed, to revise your instructions before resending) — nothing is
+  applied to the paragraph until you confirm.
 - Every version of a paragraph (the original plus each *confirmed* edit) is
   kept in order in `src/lib/paragraph-edits.ts`; Undo permanently drops the
   latest entry, reverting to whatever came before it — there's no redo, so
@@ -93,12 +124,25 @@ on the client.
   [`@tesseract.js-data/eng`](https://www.npmjs.com/package/@tesseract.js-data/eng)
   package for the language data so the test runs offline and
   deterministically instead of depending on `tesseract.js`'s default CDN
-  fetch.
-- `pdf-paragraphs.test.ts` checks the paragraph-detection heuristics: that
-  text items sharing a line and nearby lines are grouped into one
-  paragraph, that a large vertical gap starts a new one, and that
-  Tesseract's own paragraph blocks are flattened correctly for the OCR
-  path.
+  fetch. A second real-data test recognizes that same scanned page with
+  `{ blocks: true }` and checks that the paragraph-splitting logic actually
+  recovers its chapter heading, subheading, and separate body paragraphs
+  as distinct paragraphs rather than one block of text — Tesseract's own
+  paragraph grouping alone isn't enough to do that on this page.
+- `pdf-paragraphs.test.ts` checks the paragraph-splitting heuristic: lines
+  with a normal gap, the same font size, and the same color merge into
+  one paragraph; a gap as small as the smallest real paragraph break
+  measured on the scanned fixture still splits, as does a clearly wider
+  gap; a font size change alone starts a new paragraph even with no extra
+  gap; a color change alone does too; a font family change alone does
+  not cause a split; and font-size or color-sampling noise within
+  tolerance doesn't cause a false split. Also checks that Tesseract's
+  paragraph/line blocks are flattened and re-split the same way for the
+  OCR path.
+- `sample-color.test.ts` checks that the pixel-sampling color reader finds
+  ink wherever it is in a line's box, using a fake canvas context — it
+  doesn't just check one row of pixels, since a real glyph's ink might not
+  cross the exact vertical center sampled.
 - `paragraph-edits.test.ts` checks the per-paragraph edit history: it seeds
   one history per paragraph with the original text, appends new edits
   immutably, reports the current (latest) text for a paragraph, and checks
