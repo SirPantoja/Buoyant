@@ -78,5 +78,12 @@ describe("generateRevision", () => {
 
       await expect(generateRevision("Original text", "Make it shorter")).rejects.toThrow("network error");
     });
+
+    it("fails clearly instead of calling the API when the key contains a non-Latin-1 character", async () => {
+      process.env.ANTHROPIC_API_KEY = "sk-ant-abc—123";
+
+      await expect(generateRevision("Original text", "Make it shorter")).rejects.toThrow("ANTHROPIC_API_KEY");
+      expect(createMock).not.toHaveBeenCalled();
+    });
   });
 });

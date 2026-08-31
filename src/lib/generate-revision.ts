@@ -8,12 +8,31 @@ const SIMULATED_LATENCY_MS = 2000;
 const HIRING_PROXY_BASE_URL = "https://hiring-proxy.trybuoyant.ai/anthropic";
 const MODEL = "claude-opus-5";
 
+// HTTP header values must be Latin-1 (byte) strings. A key pasted through
+// something with "smart" punctuation (Notion, Word, some browsers) can
+// silently pick up a curly quote or an em dash in place of a hyphen, which
+// then fails deep inside the fetch layer with an opaque "Cannot convert
+// argument to a ByteString" error - check for it here so the failure is
+// obvious instead of cryptic.
+function assertValidHeaderValue(value: string, envVarName: string): void {
+  for (let i = 0; i < value.length; i++) {
+    if (value.charCodeAt(i) > 255) {
+      throw new Error(
+        `${envVarName} contains a character that isn't valid in an HTTP header (at position ${i + 1}). ` +
+          "This usually happens when a key is copy-pasted through an editor with \"smart\" punctuation, " +
+          "turning a hyphen into a long dash or a straight quote into a curly one - re-paste the value as plain text.",
+      );
+    }
+  }
+}
+
 export async function generateRevision(currentText: string, instructions: string): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     await new Promise((resolve) => setTimeout(resolve, SIMULATED_LATENCY_MS));
     return DUMMY_AI_RESPONSE;
   }
+  assertValidHeaderValue(apiKey, "ANTHROPIC_API_KEY");
 
   const client = new Anthropic({ apiKey, baseURL: HIRING_PROXY_BASE_URL });
   const response = await client.messages.create({
