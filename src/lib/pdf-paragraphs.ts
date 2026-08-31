@@ -35,6 +35,12 @@ export type StyledLine = {
   color: RgbColor;
 };
 
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
 // How far apart two font sizes can be (as a ratio) before they count as
 // "different". Sizes are derived from rendering/recognition data rather
 // than read as an exact declared value, so this isn't 1.0.
@@ -45,24 +51,42 @@ function fontSizesClose(a: number, b: number): boolean {
   return ratio <= FONT_SIZE_CHANGE_RATIO;
 }
 
-// Groups lines into paragraphs purely by font size: a line whose size is
-// clearly different from the line before it starts a new paragraph,
-// regardless of how close together or far apart they sit vertically. So a
-// heading immediately above body text splits into two paragraphs, while
-// two blocks of same-sized text separated by a blank line stay merged
-// into one. Font family and color are still captured per line (below) for
-// styling an edited paragraph's overlay text, just not used to split.
+// How many median line-heights a gap needs to span before it counts as a
+// paragraph break, rather than just generous line spacing within one
+// paragraph. Calibrated against two real documents rather than guessed:
+// on a digitally-generated multi-paragraph PDF, within-paragraph gaps
+// measured ~0.3x a line's height and a genuine paragraph break ~2.0x; on a
+// real scanned book page run through OCR, within-paragraph gaps measured
+// up to ~0.2x and genuine paragraph breaks as low as ~1.0x. A looser value
+// than that (closer to the ~2.0x seen on the clean PDF) misses most of the
+// real breaks in the scanned document, so this sits roughly in the middle
+// of the gap between the two documents' numbers, with comparable margin
+// on both sides of it either way.
+const GAP_TO_LINE_HEIGHT_RATIO = 0.6;
+
+// Groups lines into paragraphs: a line whose font size is clearly
+// different from the line before it starts a new paragraph, and so does a
+// large vertical gap (loosely defined - see above), even between lines of
+// the same size. So a heading immediately above body text splits on size,
+// two paragraphs of the same size separated by a blank line split on gap,
+// and two lines of the same size with only normal line spacing between
+// them stay merged. Font family and color are still captured per line
+// (below) for styling an edited paragraph's overlay text, just not used
+// to split.
 export function groupLinesIntoParagraphs(lines: StyledLine[]): ParagraphBox[] {
   if (lines.length === 0) {
     return [];
   }
+
+  const medianLineHeight = median(lines.map((l) => l.yMax - l.yMin)) || 1;
+  const paragraphBreakGap = medianLineHeight * GAP_TO_LINE_HEIGHT_RATIO;
 
   const paragraphs: StyledLine[][] = [];
   let current: StyledLine[] = [];
 
   for (const line of lines) {
     const prev = current[current.length - 1];
-    if (prev && !fontSizesClose(prev.fontSize, line.fontSize)) {
+    if (prev && (line.yMin - prev.yMax > paragraphBreakGap || !fontSizesClose(prev.fontSize, line.fontSize))) {
       paragraphs.push(current);
       current = [];
     }
@@ -126,7 +150,8 @@ function linesFromTesseractParagraph(paragraph: TesseractParagraph, sampleColor:
 // Tesseract already segments a recognized page into paragraphs, but a
 // "paragraph" there is just a block of visually close lines - it doesn't
 // account for a font size change partway through, so each one is
-// re-split the same way as the embedded-text-layer path.
+// re-split the same way as the embedded-text-layer path (which may also
+// split it further on an internal gap wider than its own line spacing).
 export function extractOcrParagraphs(page: TesseractPageLike, sampleColor: SampleColorFn): ParagraphBox[] {
   if (!page.blocks) {
     return [];

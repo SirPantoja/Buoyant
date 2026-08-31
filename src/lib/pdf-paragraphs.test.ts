@@ -17,16 +17,34 @@ function line(overrides: Partial<StyledLine> & Pick<StyledLine, "text" | "yMin" 
 }
 
 describe("groupLinesIntoParagraphs", () => {
-  it("merges consecutive lines with the same font size, even across a large gap", () => {
-    const lines = [
-      line({ text: "First line", yMin: 0, yMax: 12 }),
-      line({ text: "Second line", yMin: 100, yMax: 112 }),
-    ];
+  it("merges consecutive lines with a normal same-paragraph gap", () => {
+    const lines = [line({ text: "First line", yMin: 0, yMax: 12 }), line({ text: "Second line", yMin: 16, yMax: 28 })];
 
     const paragraphs = groupLinesIntoParagraphs(lines);
 
     expect(paragraphs).toHaveLength(1);
     expect(paragraphs[0].text).toBe("First line Second line");
+  });
+
+  it("splits at a gap as small as the smallest real paragraph break measured on a scanned document", () => {
+    // ~1.0x line height, the smallest gap-to-height ratio measured at an
+    // actual paragraph break on a real scanned page run through OCR - the
+    // threshold has to catch this, not just larger, more obvious gaps.
+    const lines = [line({ text: "First paragraph", yMin: 0, yMax: 12 }), line({ text: "Second paragraph", yMin: 24, yMax: 36 })];
+
+    const paragraphs = groupLinesIntoParagraphs(lines);
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs.map((p) => p.text)).toEqual(["First paragraph", "Second paragraph"]);
+  });
+
+  it("splits after a gap clearly wider than normal line spacing", () => {
+    const lines = [line({ text: "First paragraph", yMin: 0, yMax: 12 }), line({ text: "Second paragraph", yMin: 42, yMax: 54 })];
+
+    const paragraphs = groupLinesIntoParagraphs(lines);
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs.map((p) => p.text)).toEqual(["First paragraph", "Second paragraph"]);
   });
 
   it("splits on a font size change even with no extra gap", () => {

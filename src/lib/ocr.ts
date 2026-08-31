@@ -73,7 +73,10 @@ export async function renderPdfWithOcr(
       },
       async (canvas) => {
         const htmlCanvas = canvas as HTMLCanvasElement;
-        const { data } = await worker.recognize(htmlCanvas);
+        // `blocks` isn't included by default - without requesting it,
+        // `data.blocks` is always null and extractOcrParagraphs has
+        // nothing to work with.
+        const { data } = await worker.recognize(htmlCanvas, {}, { blocks: true });
         const context = htmlCanvas.getContext("2d");
         if (!context) {
           throw new Error("Could not create a canvas context for OCR.");
