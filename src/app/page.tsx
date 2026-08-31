@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { detectEmbeddedTextInFile } from "@/lib/detect-embedded-text";
 import { renderPdfWithOcr, type OcrProgress } from "@/lib/ocr";
 import {
   addEdit,
@@ -21,14 +22,13 @@ type UploadResult = {
   size: number;
 };
 
-type UploadResponse = {
-  name: string;
-  size: number;
-  source: "embedded" | "ocr-required";
-  text: string | null;
-};
+// A client-only sanity cap on file size, not a server limit: the file
+// never leaves the browser (see detect-embedded-text.ts), so this exists
+// only to keep an accidental huge upload from stalling the page, not to
+// work around any request-size ceiling.
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
-type Status = "idle" | "uploading" | "rendering" | "ocr" | "success" | "error";
+type Status = "idle" | "reading" | "rendering" | "ocr" | "success" | "error";
 
 // The AI revision flow for whichever paragraph is selected:
 // idle - the textarea is editable, waiting for a submission.
@@ -61,7 +61,19 @@ export default function Home() {
       return;
     }
 
-    setStatus("uploading");
+    if (file.type !== "application/pdf") {
+      setStatus("error");
+      setMessage("Only PDF files are allowed.");
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      setStatus("error");
+      setMessage("File exceeds the 50 MB limit.");
+      return;
+    }
+
+    setStatus("reading");
     setMessage(null);
     setResult(null);
     setPages(null);
@@ -70,30 +82,14 @@ export default function Home() {
     resetEditPanel();
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await fetch("/api/upload", { method: "POST", body: formData });
-
-      let data: UploadResponse & { error?: string };
-      try {
-        data = await response.json();
-      } catch {
-        // A platform-level rejection (e.g. a request body over Vercel's
-        // ~4.5 MB Serverless Function limit) never reaches our own JSON
-        // error responses below, so the body here can be empty or plain
-        // text instead - report that plainly rather than crashing on the
-        // failed parse.
-        throw new Error(`Upload failed (${response.status}). The file may be too large.`);
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error ?? "Upload failed.");
-      }
+      // Runs entirely client-side (see detect-embedded-text.ts) rather
+      // than posting the file to a server route, so there's no request-body
+      // size limit to work around for a large PDF.
+      const detected = await detectEmbeddedTextInFile(file);
 
       let renderedPages: RenderedPage[];
 
-      if (data.source === "embedded" && data.text !== null) {
+      if (detected.source === "embedded") {
         setStatus("rendering");
         renderedPages = await renderEmbeddedPdfPages(file);
       } else {
@@ -103,7 +99,7 @@ export default function Home() {
         renderedPages = ocrResult.pages;
       }
 
-      setResult({ name: data.name, size: data.size });
+      setResult({ name: file.name, size: file.size });
       setPages(renderedPages);
       setEditState(buildInitialEditState(renderedPages));
       setStatus("success");
@@ -174,7 +170,7 @@ export default function Home() {
     setEditState((prev) => undoEdit(prev, selectedKey));
   }
 
-  const busy = status === "uploading" || status === "rendering" || status === "ocr";
+  const busy = status === "reading" || status === "rendering" || status === "ocr";
   const selectedHistory = selectedKey ? editState[selectedKey] : undefined;
 
   return (
@@ -188,8 +184,8 @@ export default function Home() {
         <form onSubmit={handleSubmit} className={styles.form}>
           <input ref={inputRef} type="file" accept="application/pdf" />
           <button type="submit" disabled={busy}>
-            {status === "uploading"
-              ? "Uploading..."
+            {status === "reading"
+              ? "Reading..."
               : status === "rendering"
                 ? "Rendering..."
                 : status === "ocr"

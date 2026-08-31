@@ -34,24 +34,33 @@ npm test        # run the test suite
 ## How it works
 
 - `src/app/page.tsx` renders the "Buoyant AI Proposal Revising" header (with
-  a placeholder logo mark, `BuoyantLogo`, standing in for the real one), a
-  file picker restricted to PDFs, and posts the selected file to
-  `/api/upload`.
-- `src/app/api/upload/route.ts` validates the upload (must be a PDF, up to
-  4 MB — comfortably under Vercel's own ~4.5 MB Serverless Function request
-  body limit, so an oversized file gets a clean error from this route
-  instead of a platform-level rejection with no JSON body), then uses
-  [`pdf-parse`](https://www.npmjs.com/package/pdf-parse) to read the PDF's
-  embedded text layer.
+  a placeholder logo mark, `BuoyantLogo`, standing in for the real one) and
+  a file picker restricted to PDFs, up to a 50 MB sanity limit. The chosen
+  file never leaves the browser as a whole HTTP request body - see below -
+  so this limit exists only to keep an accidental huge upload from
+  stalling the page, not to work around a server-side ceiling.
+- `src/lib/detect-embedded-text.ts` reads the PDF's embedded text layer
+  entirely client-side with [`pdfjs-dist`](https://www.npmjs.com/package/pdfjs-dist)
+  (`page.getTextContent()` on every page) to decide whether it's a normal
+  document or needs OCR. This used to be a server route that posted the
+  whole file as one request body and read it with
+  [`pdf-parse`](https://www.npmjs.com/package/pdf-parse) - but Vercel's
+  Serverless Functions reject any request body over ~4.5 MB at the
+  platform level, before a route even runs, and that rejection isn't a
+  JSON response, so the client's `response.json()` crashed with
+  `Unexpected end of JSON input` instead of showing a real error for
+  anything but a small PDF. Doing the same check client-side removes that
+  ceiling entirely, the same way the rendering and OCR steps below already
+  run without it.
 - If the PDF has little or no embedded text (i.e. it's a scanned document),
-  the server tells the client to fall back to OCR instead. The browser then
-  renders each page to a canvas with [`pdfjs-dist`](https://www.npmjs.com/package/pdfjs-dist)
-  and reads the text off those images with [`tesseract.js`](https://www.npmjs.com/package/tesseract.js)
-  (`src/lib/ocr.ts`). This runs entirely in the browser, so it needs no server
-  compute and works within Vercel's serverless limits. `worker.recognize`
-  must be called with `{ blocks: true }` or Tesseract's result omits the
-  block/paragraph/line structure entirely (`data.blocks` comes back `null`),
-  which the paragraph-box feature below depends on.
+  the browser falls back to OCR instead: it renders each page to a canvas
+  with `pdfjs-dist` and reads the text off those images with
+  [`tesseract.js`](https://www.npmjs.com/package/tesseract.js)
+  (`src/lib/ocr.ts`). This also runs entirely in the browser, so it needs no
+  server compute either. `worker.recognize` must be called with
+  `{ blocks: true }` or Tesseract's result omits the block/paragraph/line
+  structure entirely (`data.blocks` comes back `null`), which the
+  paragraph-box feature below depends on.
 - Either way, once the extracted text comes back the app moves straight to
   the interactive viewer below rather than displaying that raw text or how
   it was detected — those were only useful for debugging the extraction
@@ -142,8 +151,10 @@ on the client.
 
 `npm test` runs the [Vitest](https://vitest.dev) suite in `src/lib/`:
 
-- `extract-pdf-text.test.ts` checks that `pdf-parse` reads the expected text
-  from a digital PDF and correctly flags a scanned one as needing OCR.
+- `detect-embedded-text.test.ts` checks that the client-side text-layer
+  check reads the expected text from a digital PDF and correctly flags a
+  scanned one as needing OCR, opening the same real fixtures used by
+  `ocr.test.ts` with `pdfjs-dist`'s Node-compatible `legacy` build.
 - `ocr.test.ts` checks the page-by-page OCR orchestration logic, and runs a
   real (non-mocked) OCR pass over a scanned fixture page, asserting the
   recognized text contains the expected phrases. It uses the
