@@ -1,6 +1,7 @@
-# Buoyant
+# Buoyant AI Proposal Revising
 
-A Next.js + TypeScript app for uploading a PDF and reading the text out of it.
+A Next.js + TypeScript app for uploading a PDF and revising it paragraph by
+paragraph with AI.
 
 ## Running locally
 
@@ -32,8 +33,10 @@ npm test        # run the test suite
 
 ## How it works
 
-- `src/app/page.tsx` renders a file picker restricted to PDFs and posts the
-  selected file to `/api/upload`.
+- `src/app/page.tsx` renders the "Buoyant AI Proposal Revising" header (with
+  a placeholder logo mark, `BuoyantLogo`, standing in for the real one), a
+  file picker restricted to PDFs, and posts the selected file to
+  `/api/upload`.
 - `src/app/api/upload/route.ts` validates the upload (must be a PDF, up to
   50 MB), then uses [`pdf-parse`](https://www.npmjs.com/package/pdf-parse) to
   read the PDF's embedded text layer.
@@ -46,7 +49,10 @@ npm test        # run the test suite
   must be called with `{ blocks: true }` or Tesseract's result omits the
   block/paragraph/line structure entirely (`data.blocks` comes back `null`),
   which the paragraph-box feature below depends on.
-- Either way, the extracted text is displayed on the page once it's ready.
+- Either way, once the extracted text comes back the app moves straight to
+  the interactive viewer below rather than displaying that raw text or how
+  it was detected — those were only useful for debugging the extraction
+  step itself, not for actually revising a document.
 - The browser also renders every page of the PDF as an image and overlays a
   box around each paragraph (`src/lib/pdf-paragraphs.ts`), so hovering over
   a paragraph on the page highlights it. For a PDF with an embedded text
