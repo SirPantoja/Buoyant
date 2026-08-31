@@ -20,23 +20,23 @@ describe("sendPdfEmail", () => {
   it("throws a clear error when RESEND_API_KEY isn't configured", async () => {
     delete process.env.RESEND_API_KEY;
 
-    await expect(sendPdfEmail("someone@example.com", new Uint8Array(), "edited.pdf")).rejects.toThrow(
-      "RESEND_API_KEY",
-    );
+    await expect(
+      sendPdfEmail("someone@example.com", "https://example.public.blob.vercel-storage.com/edited.pdf", "edited.pdf"),
+    ).rejects.toThrow("RESEND_API_KEY");
     expect(sendMock).not.toHaveBeenCalled();
   });
 
-  it("sends the PDF bytes as a named attachment", async () => {
+  it("sends the blob URL as a path-based attachment", async () => {
     process.env.RESEND_API_KEY = "test-key";
     sendMock.mockResolvedValue({ data: { id: "abc" }, error: null });
 
-    const pdfBytes = new Uint8Array([1, 2, 3]);
-    await sendPdfEmail("someone@example.com", pdfBytes, "edited.pdf");
+    const pdfUrl = "https://example.public.blob.vercel-storage.com/edited.pdf";
+    await sendPdfEmail("someone@example.com", pdfUrl, "edited.pdf");
 
     expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "someone@example.com",
-        attachments: [{ filename: "edited.pdf", content: Buffer.from(pdfBytes) }],
+        attachments: [{ path: pdfUrl, filename: "edited.pdf" }],
       }),
     );
   });
@@ -48,8 +48,12 @@ describe("sendPdfEmail", () => {
       error: { message: "You can only send testing emails to your own email address." },
     });
 
-    await expect(sendPdfEmail("someone-else@example.com", new Uint8Array(), "edited.pdf")).rejects.toThrow(
-      "You can only send testing emails to your own email address.",
-    );
+    await expect(
+      sendPdfEmail(
+        "someone-else@example.com",
+        "https://example.public.blob.vercel-storage.com/edited.pdf",
+        "edited.pdf",
+      ),
+    ).rejects.toThrow("You can only send testing emails to your own email address.");
   });
 });

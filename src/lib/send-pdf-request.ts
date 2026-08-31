@@ -1,13 +1,20 @@
+import { upload } from "@vercel/blob/client";
+
 export async function sendPdfByEmail(email: string, pdfBytes: Uint8Array, fileName: string): Promise<void> {
-  const formData = new FormData();
-  formData.append("email", email);
-  // Uint8Array isn't directly a valid Blob part in all environments, so
-  // wrap it in an ArrayBuffer copy first.
-  formData.append("pdf", new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" }), fileName);
+  // Uploads directly from the browser to Vercel Blob storage rather than
+  // to our own server: the actual PDF bytes never pass through a Vercel
+  // Serverless Function (whose request body is capped at ~4.5 MB), only
+  // a short-lived client token (requested via /api/blob-upload) and,
+  // afterward, the small resulting URL.
+  const blob = await upload(fileName, new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" }), {
+    access: "public",
+    handleUploadUrl: "/api/blob-upload",
+  });
 
   const response = await fetch("/api/send-pdf", {
     method: "POST",
-    body: formData,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, pdfUrl: blob.url, fileName }),
   });
 
   let data: { success?: boolean; error?: string };

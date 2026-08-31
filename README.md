@@ -16,13 +16,19 @@ paragraph with AI.
    ```bash
    npm install
    ```
-3. (Optional) To let the "email me the edited PDF" feature actually send
-   mail, create `.env.local` with a [Resend](https://resend.com) API key:
+3. (Optional) To let the "email me the edited PDF" feature actually work,
+   add two environment variables to `.env.local`:
    ```bash
-   echo "RESEND_API_KEY=re_..." > .env.local
+   echo "RESEND_API_KEY=re_..." >> .env.local
+   echo "BLOB_READ_WRITE_TOKEN=vercel_blob_rw_..." >> .env.local
    ```
-   Everything else works fine without it - only that one route needs it,
-   and fails with a clear error instead of a silent no-op if it's unset.
+   The Resend key comes from your [Resend](https://resend.com) dashboard.
+   The Blob token comes from connecting [Vercel Blob](https://vercel.com/docs/vercel-blob)
+   storage to your Vercel project (Storage tab → create/connect a Blob
+   store) - either copy the token from there, or run `vercel env pull` to
+   fetch it locally once connected. Everything else works fine without
+   either - only that one feature needs them, and fails with a clear
+   error instead of a silent no-op if either is unset.
 4. Start the development server:
    ```bash
    npm run dev
@@ -166,27 +172,36 @@ npm test        # run the test suite
   doesn't have the original font file to embed, so edits render in
   Helvetica). Reusing the original file rather than re-rendering keeps the
   output close to its original size, and any page with no edits on it
-  comes through completely unchanged. That PDF, along with the typed
-  address, is posted as multipart form data (not JSON - the file is real
-  bytes, not something worth base64-inflating) to `/api/send-pdf`, which
-  validates both and calls `sendPdfEmail` (`src/lib/send-pdf-email.ts`) to
-  actually send it through [Resend](https://resend.com). This needs a
-  `RESEND_API_KEY` environment variable to work - set locally in
-  `.env.local` (gitignored, never commit a real key) and in your hosting
-  platform's own environment variable settings for a real deployment;
-  without it, the route fails with a clear "Email sending isn't
-  configured" error instead of a silent no-op. Sends go out from Resend's
-  shared `onboarding@resend.dev` address, which Resend restricts to
-  emailing the account's own verified address until a custom sending
+  comes through completely unchanged. That PDF is uploaded straight from
+  the browser to [Vercel Blob](https://vercel.com/docs/vercel-blob)
+  storage (`src/lib/send-pdf-request.ts`, using `@vercel/blob/client`'s
+  `upload()`) rather than to one of this app's own server routes - the
+  only thing `/api/blob-upload` (`src/app/api/blob-upload/route.ts`)
+  does is issue a short-lived, scoped upload token via `handleUpload`, so
+  the PDF's actual bytes never pass through a Vercel Serverless Function
+  at all. Only the resulting URL, along with the typed address, is then
+  posted (as a small JSON body) to `/api/send-pdf`, which validates both
+  and calls `sendPdfEmail` (`src/lib/send-pdf-email.ts`) to actually send
+  it through [Resend](https://resend.com) - passed as a `path`-based
+  attachment (Resend fetches it directly from the URL) rather than raw
+  bytes. This needs both a `BLOB_READ_WRITE_TOKEN` (auto-added to a
+  Vercel project's environment variables once Blob storage is connected
+  to it - the `@vercel/blob` SDK reads it automatically) and a
+  `RESEND_API_KEY` (set locally in `.env.local` - gitignored, never
+  commit a real key - and in your hosting platform's own environment
+  variable settings for a real deployment) to work; missing either fails
+  with a clear error instead of a silent no-op. Sends go out from
+  Resend's shared `onboarding@resend.dev` address, which Resend restricts
+  to emailing the account's own verified address until a custom sending
   domain is verified - sending to any other address fails with Resend's
   own error message, surfaced as-is rather than swallowed. The address is
   validated both by the input's own `type="email"` and again on the
-  server. Unlike the rest of the upload/edit flow, this one *does* have to
-  post a real payload to a server route (the API key can't safely live in
-  the browser), so the edited PDF is capped at 4 MB client-side before the
-  request is even made - comfortably under Vercel's own ~4.5 MB
-  Serverless Function request-body limit - rather than let an oversized
-  one hit that limit and fail with an unclear error.
+  server. Uploading directly to Blob storage rather than through a
+  Serverless Function means Vercel's own ~4.5 MB request-body limit
+  doesn't apply here; the edited PDF is still capped (client-side, with
+  margin) at 35 MB to stay under Resend's own ~40 MB per-email attachment
+  limit instead, rather than let an oversized one fail partway through
+  sending.
 
 Note: OCR downloads its recognition engine and language data from a CDN the
 first time it runs in a given browser, so it requires normal internet access
@@ -249,16 +264,17 @@ on the client.
   confirmed edits is left untouched, and the output has a page for every
   page of the input even when nothing on it changed.
 - `send-pdf-email.test.ts` mocks the `resend` package to check
-  `sendPdfEmail` sends the PDF bytes as a named attachment, throws a
-  clear error when `RESEND_API_KEY` isn't set (without calling Resend at
-  all), and surfaces Resend's own error message on failure rather than a
-  generic one.
-- `send-pdf-request.test.ts` checks the client-side request helper posts
-  the email address and PDF bytes as form data to `/api/send-pdf`, that
-  it surfaces the server's error message on failure, and that a non-JSON
-  response throws a plain error instead of crashing on the failed parse -
-  the same three cases as `revise-paragraph.test.ts`, for the same
-  reasons.
+  `sendPdfEmail` sends the blob URL as a `path`-based attachment, throws
+  a clear error when `RESEND_API_KEY` isn't set (without calling Resend
+  at all), and surfaces Resend's own error message on failure rather than
+  a generic one.
+- `send-pdf-request.test.ts` mocks `@vercel/blob/client`'s `upload` to
+  check the client-side request helper uploads the PDF there first, then
+  posts the resulting URL and email address as JSON to `/api/send-pdf`,
+  that it surfaces the server's error message on failure, and that a
+  non-JSON response throws a plain error instead of crashing on the
+  failed parse - the same three cases as `revise-paragraph.test.ts`, for
+  the same reasons.
 
 ## Deployment
 

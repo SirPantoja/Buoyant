@@ -30,13 +30,13 @@ type UploadResult = {
 // work around any request-size ceiling.
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
-// Unlike the upload above, the edited PDF has to reach the server to be
-// attached and sent (the email API key can't safely live in the
-// browser), so this one is a real limit: Vercel's Serverless Functions
-// reject any request body over ~4.5 MB at the platform level. Checking
-// client-side first means an oversized PDF gets a clear message instead
-// of a platform-level rejection.
-const MAX_EMAIL_ATTACHMENT_SIZE = 4 * 1024 * 1024; // 4 MB
+// The edited PDF is uploaded directly to Vercel Blob storage rather than
+// through a Serverless Function (see send-pdf-request.ts), so Vercel's
+// own ~4.5 MB request-body limit doesn't apply here - the real ceiling is
+// Resend's own attachment size limit (~40 MB per email). Checking
+// client-side first, with some margin, means an oversized PDF gets a
+// clear message instead of a failure partway through sending.
+const MAX_EMAIL_ATTACHMENT_SIZE = 35 * 1024 * 1024; // 35 MB
 
 type Status = "idle" | "reading" | "rendering" | "ocr" | "success" | "error";
 
@@ -209,7 +209,7 @@ export default function Home() {
       const pdfBytes = await buildEditedPdf(sourceFile, pages, editState);
 
       if (pdfBytes.byteLength > MAX_EMAIL_ATTACHMENT_SIZE) {
-        throw new Error("The edited PDF is too large to email (over 4 MB). Try a shorter document.");
+        throw new Error("The edited PDF is too large to email (over 35 MB). Try a shorter document.");
       }
 
       await sendPdfByEmail(email, pdfBytes, sourceFile.name);
