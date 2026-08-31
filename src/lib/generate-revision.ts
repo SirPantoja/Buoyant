@@ -27,6 +27,35 @@ function assertValidHeaderValue(value: string, envVarName: string): void {
   }
 }
 
+// Wraps undici's fetch (Node's own implementation, used explicitly rather
+// than the ambient global one - a production Next.js server patches
+// globalThis.fetch for its own Data Cache/tracing before route handlers
+// run) so every response's status/headers/first bytes get logged. The
+// hiring proxy has been returning a corrupted (invalid-UTF-8) body under
+// a Content-Type: application/json header consistently, and swapping the
+// fetch implementation alone didn't change that - so the corruption is
+// most likely already present on the wire, not introduced client-side.
+// This logs what's actually needed to tell a Content-Encoding mismatch
+// (compressed bytes served as if they were plain text, or vice versa)
+// apart from anything else, on the next occurrence.
+async function diagnosticFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+  const response = await undiciFetch(input as never, init as never);
+  try {
+    const headers = Object.fromEntries(response.headers.entries());
+    const firstBytes = new Uint8Array(await response.clone().arrayBuffer()).slice(0, 24);
+    console.error("generateRevision: hiring proxy response metadata", {
+      status: response.status,
+      headers,
+      firstBytesHex: Array.from(firstBytes)
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join(" "),
+    });
+  } catch (diagnosticError) {
+    console.error("generateRevision: failed to log response diagnostics", diagnosticError);
+  }
+  return response as unknown as Response;
+}
+
 export async function generateRevision(currentText: string, instructions: string): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -35,14 +64,7 @@ export async function generateRevision(currentText: string, instructions: string
   }
   assertValidHeaderValue(apiKey, "ANTHROPIC_API_KEY");
 
-  // Explicitly use undici's fetch rather than the ambient global one. In a
-  // production Next.js server, globalThis.fetch is patched for Next's own
-  // Data Cache/tracing before route handlers ever run, and that wrapper is
-  // a plausible reason a real, external response (this hiring proxy's) was
-  // coming through corrupted - the raw bytes we were seeing on repeated,
-  // non-transient failures look like mishandled decompression, not
-  // anything the proxy itself is doing wrong.
-  const client = new Anthropic({ apiKey, baseURL: HIRING_PROXY_BASE_URL, fetch: undiciFetch as unknown as typeof fetch });
+  const client = new Anthropic({ apiKey, baseURL: HIRING_PROXY_BASE_URL, fetch: diagnosticFetch as unknown as typeof fetch });
   let response: Anthropic.Message;
   try {
     // Deliberately minimal request body (model/max_tokens/messages only) -
