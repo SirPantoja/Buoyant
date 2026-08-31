@@ -74,7 +74,18 @@ export default function Home() {
       formData.append("file", file);
 
       const response = await fetch("/api/upload", { method: "POST", body: formData });
-      const data: UploadResponse & { error?: string } = await response.json();
+
+      let data: UploadResponse & { error?: string };
+      try {
+        data = await response.json();
+      } catch {
+        // A platform-level rejection (e.g. a request body over Vercel's
+        // ~4.5 MB Serverless Function limit) never reaches our own JSON
+        // error responses below, so the body here can be empty or plain
+        // text instead - report that plainly rather than crashing on the
+        // failed parse.
+        throw new Error(`Upload failed (${response.status}). The file may be too large.`);
+      }
 
       if (!response.ok) {
         throw new Error(data.error ?? "Upload failed.");
