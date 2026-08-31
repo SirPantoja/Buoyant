@@ -107,10 +107,12 @@ npm test        # run the test suite
   **Try again with edits** (goes back to the text box, prefilled with what
   you typed, to revise your instructions before resending) — nothing is
   applied to the paragraph until you confirm. An edited paragraph's box
-  only takes the original paragraph's height as a floor, not a fixed
-  size, so a replacement that's longer than the original (turning a
-  one-liner into several lines, say) grows the box downward to fit
-  instead of clipping the text and leaving it scrollable.
+  only takes the original paragraph's width and height as floors, not a
+  fixed size, so a longer replacement grows to fit instead of clipping
+  the text and leaving it scrollable — widening in place first, up to
+  the page's right edge, for a replacement that still reads as one line,
+  and only wrapping and growing downward once it's long enough that it
+  no longer fits on one line even there.
 - Every version of a paragraph (the original plus each *confirmed* edit) is
   kept in order in `src/lib/paragraph-edits.ts`; Undo permanently drops the
   latest entry, reverting to whatever came before it — there's no redo, so
