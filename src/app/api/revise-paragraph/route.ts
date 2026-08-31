@@ -24,7 +24,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Instructions can't be empty." }, { status: 400 });
   }
 
-  const result = await generateRevision(currentText, instructions);
+  let result: string;
+  try {
+    result = await generateRevision(currentText, instructions);
+  } catch (err) {
+    console.error("generateRevision failed", err);
+    const message = err instanceof Error ? err.message : "Failed to generate a revision.";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 
   return NextResponse.json({ result });
 }

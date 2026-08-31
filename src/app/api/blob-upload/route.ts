@@ -22,6 +22,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json(jsonResponse);
   } catch (error) {
+    // The @vercel/blob browser SDK always shows a generic "Failed to
+    // retrieve the client token" message to the user regardless of what
+    // this route returns, so the real reason (e.g. a missing
+    // BLOB_READ_WRITE_TOKEN) is only visible here, in the server logs.
+    console.error("blob-upload failed", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Upload failed." }, { status: 400 });
   }
 }
