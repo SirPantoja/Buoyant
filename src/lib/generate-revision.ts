@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { fetch as undiciFetch } from "undici";
 
 // Stands in for a real AI call when ANTHROPIC_API_KEY isn't configured, so
 // local dev and previews without a key still exercise the full edit flow.
@@ -34,7 +35,14 @@ export async function generateRevision(currentText: string, instructions: string
   }
   assertValidHeaderValue(apiKey, "ANTHROPIC_API_KEY");
 
-  const client = new Anthropic({ apiKey, baseURL: HIRING_PROXY_BASE_URL });
+  // Explicitly use undici's fetch rather than the ambient global one. In a
+  // production Next.js server, globalThis.fetch is patched for Next's own
+  // Data Cache/tracing before route handlers ever run, and that wrapper is
+  // a plausible reason a real, external response (this hiring proxy's) was
+  // coming through corrupted - the raw bytes we were seeing on repeated,
+  // non-transient failures look like mishandled decompression, not
+  // anything the proxy itself is doing wrong.
+  const client = new Anthropic({ apiKey, baseURL: HIRING_PROXY_BASE_URL, fetch: undiciFetch as unknown as typeof fetch });
   let response: Anthropic.Message;
   try {
     // Deliberately minimal request body (model/max_tokens/messages only) -
