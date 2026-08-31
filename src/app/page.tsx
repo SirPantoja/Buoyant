@@ -178,7 +178,10 @@ export default function Home() {
       <header className={styles.brandRow}>
         {/* eslint-disable-next-line @next/next/no-img-element -- a tiny (42x43) static icon, not worth next/image's overhead */}
         <img src="/logo.png" alt="Buoyant" className={styles.logoMark} />
-        <h1 className={styles.title}>Buoyant AI Proposal Revising</h1>
+        <div>
+          <h1 className={styles.title}>Buoyant</h1>
+          <p className={styles.subtitle}>Seamlessly edit your proposals</p>
+        </div>
       </header>
 
       <main className={styles.main}>
@@ -191,7 +194,7 @@ export default function Home() {
                 ? "Rendering..."
                 : status === "ocr"
                   ? "Running OCR..."
-                  : "Upload"}
+                  : "Begin Revising"}
           </button>
         </form>
 

@@ -30,7 +30,7 @@
 
 .brandRow {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 20px;
   width: 100%;
   max-width: 900px;
@@ -39,24 +39,34 @@
 }
 
 .logoMark {
-  width: 64px;
-  height: 64px;
+  /* Tracks the title's own clamp() scale so the logo grows and shrinks
+     with it, landing close to the combined height of the title+subtitle
+     block next to it across the viewport range; width follows from the
+     source's own 42x43 aspect ratio. The source is small, so at this
+     size it's a real upscale and will look soft, but that's the tradeoff
+     for matching the much taller text block. */
+  height: clamp(60px, 11vw, 136px);
+  width: auto;
+  aspect-ratio: 42 / 43;
+  object-fit: contain;
   flex-shrink: 0;
-  /* The source image is only 42x43, so this is already close to its
-     natural size rather than a large upscale that would blur it. */
-  margin-top: 4px;
 }
 
 .title {
   margin: 0;
   /* Deliberately huge - scales from 40px up to 96px with the viewport so
-     it reads as a page-filling hero headline rather than a small app
-     title, wrapping across lines on anything but a very wide screen. */
+     it reads as a page-filling headline rather than a small app title. */
   font-size: clamp(2.5rem, 7vw, 6rem);
   line-height: 1.05;
   letter-spacing: -0.01em;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  font-size: clamp(1rem, 2vw, 1.5rem);
+  color: var(--text-secondary);
 }
 
 .main {
