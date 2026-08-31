@@ -88,7 +88,7 @@ describe("groupLinesIntoParagraphs", () => {
     // this test, but still nowhere near a genuinely different color.
     const lines = [
       line({ text: "First line", yMin: 0, yMax: 12, color: { r: 10, g: 10, b: 10 } }),
-      line({ text: "Second line", yMin: 13, yMax: 25, color: { r: 60, g: 60, b: 60 } }),
+      line({ text: "Second line", yMin: 13, yMax: 25, color: { r: 78, g: 78, b: 78 } }),
     ];
 
     const paragraphs = groupLinesIntoParagraphs(lines);

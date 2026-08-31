@@ -58,7 +58,7 @@ function fontSizesClose(a: number, b: number): boolean {
 // artifacts on a scanned page, anti-aliasing, etc.), so this is generous
 // - a genuine color change (e.g. black body text to a red callout) is
 // still far larger than this.
-const COLOR_DISTANCE_THRESHOLD = 90;
+const COLOR_DISTANCE_THRESHOLD = 120;
 
 function colorsClose(a: RgbColor, b: RgbColor): boolean {
   return Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b) <= COLOR_DISTANCE_THRESHOLD;
