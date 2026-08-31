@@ -70,10 +70,22 @@ describe("groupLinesIntoParagraphs", () => {
     expect(paragraphs).toHaveLength(1);
   });
 
-  it("does not split on a color change alone", () => {
+  it("splits on a color change even with no extra gap or size change", () => {
     const lines = [
       line({ text: "Black text", yMin: 0, yMax: 12, color: black }),
       line({ text: "Red text", yMin: 13, yMax: 25, color: red }),
+    ];
+
+    const paragraphs = groupLinesIntoParagraphs(lines);
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs.map((p) => p.text)).toEqual(["Black text", "Red text"]);
+  });
+
+  it("does not split on color sampling noise from rendering/recognition", () => {
+    const lines = [
+      line({ text: "First line", yMin: 0, yMax: 12, color: { r: 10, g: 10, b: 10 } }),
+      line({ text: "Second line", yMin: 13, yMax: 25, color: { r: 25, g: 18, b: 20 } }),
     ];
 
     const paragraphs = groupLinesIntoParagraphs(lines);
@@ -158,7 +170,7 @@ describe("extractOcrParagraphs", () => {
     expect(paragraphs.map((p) => p.text)).toEqual(["Small line", "Much bigger line"]);
   });
 
-  it("does not split a Tesseract paragraph just because its lines' colors diverge", () => {
+  it("splits a Tesseract paragraph further when its lines' colors diverge", () => {
     const page = {
       blocks: [
         {
@@ -183,8 +195,8 @@ describe("extractOcrParagraphs", () => {
 
     const paragraphs = extractOcrParagraphs(page, (xMin, _xMax, yMin) => colorForLine[`${xMin},${yMin}`] ?? black);
 
-    expect(paragraphs).toHaveLength(1);
-    expect(paragraphs[0].text).toBe("Black line Red line");
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs.map((p) => p.text)).toEqual(["Black line", "Red line"]);
   });
 
   it("returns nothing when Tesseract found no blocks", () => {

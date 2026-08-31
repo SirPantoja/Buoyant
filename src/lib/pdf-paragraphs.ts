@@ -51,6 +51,18 @@ function fontSizesClose(a: number, b: number): boolean {
   return ratio <= FONT_SIZE_CHANGE_RATIO;
 }
 
+// How far apart two sampled colors can be (as a Euclidean RGB distance)
+// before they count as "different". Colors come from pixel sampling
+// rather than an exact declared value, so small noise between two lines
+// of the same intended color shouldn't trigger a split - but a genuine
+// color change (e.g. black body text to a red callout) is far larger
+// than that noise.
+const COLOR_DISTANCE_THRESHOLD = 40;
+
+function colorsClose(a: RgbColor, b: RgbColor): boolean {
+  return Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b) <= COLOR_DISTANCE_THRESHOLD;
+}
+
 // How many median line-heights a gap needs to span before it counts as a
 // paragraph break, rather than just generous line spacing within one
 // paragraph. Calibrated against two real documents rather than guessed:
@@ -66,13 +78,14 @@ const GAP_TO_LINE_HEIGHT_RATIO = 0.6;
 
 // Groups lines into paragraphs: a line whose font size is clearly
 // different from the line before it starts a new paragraph, and so does a
-// large vertical gap (loosely defined - see above), even between lines of
-// the same size. So a heading immediately above body text splits on size,
-// two paragraphs of the same size separated by a blank line split on gap,
-// and two lines of the same size with only normal line spacing between
-// them stay merged. Font family and color are still captured per line
-// (below) for styling an edited paragraph's overlay text, just not used
-// to split.
+// large vertical gap (loosely defined - see above) or a clear color
+// change, even between lines of the same size. So a heading immediately
+// above body text splits on size, two paragraphs of the same size
+// separated by a blank line split on gap, a callout in a different color
+// splits even with normal spacing and the same size, and two lines that
+// only differ in font family stay merged. Font family is still captured
+// per line (below) for styling an edited paragraph's overlay text, just
+// not used to split.
 export function groupLinesIntoParagraphs(lines: StyledLine[]): ParagraphBox[] {
   if (lines.length === 0) {
     return [];
@@ -86,7 +99,12 @@ export function groupLinesIntoParagraphs(lines: StyledLine[]): ParagraphBox[] {
 
   for (const line of lines) {
     const prev = current[current.length - 1];
-    if (prev && (line.yMin - prev.yMax > paragraphBreakGap || !fontSizesClose(prev.fontSize, line.fontSize))) {
+    if (
+      prev &&
+      (line.yMin - prev.yMax > paragraphBreakGap ||
+        !fontSizesClose(prev.fontSize, line.fontSize) ||
+        !colorsClose(prev.color, line.color))
+    ) {
       paragraphs.push(current);
       current = [];
     }

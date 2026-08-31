@@ -58,24 +58,28 @@ npm test        # run the test suite
   `pdfjs-dist`'s text-layer metadata for an embedded-text PDF, or estimated
   from line height for a scanned one; color comes from sampling the
   rendered page's actual pixels (`src/lib/sample-color.ts`), since neither
-  source exposes fill color directly. Paragraphs split on either of two
+  source exposes fill color directly. Paragraphs split on any of three
   signals: a line whose font size is clearly different from the line
-  before it (a heading immediately above body text), or a vertical gap
+  before it (a heading immediately above body text), a vertical gap
   before it that's clearly wider than normal line spacing (a blank line
-  between two paragraphs of the same size) — a font family or color
-  change alone does not split. The gap threshold
-  (`GAP_TO_LINE_HEIGHT_RATIO` in `src/lib/pdf-paragraphs.ts`) is
-  calibrated against two real documents rather than guessed: a
+  between two paragraphs of the same size), or a clear color change (a
+  callout or highlighted line in the middle of otherwise same-sized,
+  normally-spaced text) — a font family change alone does not split. The
+  gap threshold (`GAP_TO_LINE_HEIGHT_RATIO` in `src/lib/pdf-paragraphs.ts`)
+  is calibrated against two real documents rather than guessed: a
   digitally-generated multi-paragraph PDF, where within-paragraph gaps
   measured well under the threshold and a genuine break well over it, and
   a real scanned book page run through OCR, where genuine paragraph
   breaks measured as low as ~1.0x a line's height, much tighter than the
   clean PDF's. The chosen value sits with margin on both sides of both
   documents' numbers, favoring the tighter document since a looser value
-  misses most of its real breaks. Font family and color are only used to
-  style an edited paragraph's overlay text (so a confirmed edit keeps
-  looking like it belongs in that PDF rather than in a generic box), not
-  to decide where to split.
+  misses most of its real breaks. The color threshold
+  (`COLOR_DISTANCE_THRESHOLD`) is a Euclidean RGB distance loose enough to
+  absorb sampling noise between lines of the same intended color, but far
+  tighter than the distance between genuinely different colors like black
+  and red. Font family is only used to style an edited paragraph's
+  overlay text (so a confirmed edit keeps looking like it belongs in that
+  PDF rather than in a generic box), not to decide where to split.
 - Clicking a paragraph opens an edit panel to the side with "Submit
   revisions" and "Undo" buttons at its top and a text box below them, where
   you describe the edit you want. Submitting sends that instruction to
@@ -124,14 +128,15 @@ on the client.
   as distinct paragraphs rather than one block of text — Tesseract's own
   paragraph grouping alone isn't enough to do that on this page.
 - `pdf-paragraphs.test.ts` checks the paragraph-splitting heuristic: lines
-  with a normal gap and the same font size merge into one paragraph; a
-  gap as small as the smallest real paragraph break measured on the
-  scanned fixture still splits, as does a clearly wider gap; a font size
-  change alone starts a new paragraph even with no extra gap; a font
-  family or color change alone does not cause a split; and font-size
-  noise within tolerance doesn't cause a false split. Also checks that
-  Tesseract's paragraph/line blocks are flattened and re-split the same
-  way for the OCR path.
+  with a normal gap, the same font size, and the same color merge into
+  one paragraph; a gap as small as the smallest real paragraph break
+  measured on the scanned fixture still splits, as does a clearly wider
+  gap; a font size change alone starts a new paragraph even with no extra
+  gap; a color change alone does too; a font family change alone does
+  not cause a split; and font-size or color-sampling noise within
+  tolerance doesn't cause a false split. Also checks that Tesseract's
+  paragraph/line blocks are flattened and re-split the same way for the
+  OCR path.
 - `sample-color.test.ts` checks that the pixel-sampling color reader finds
   ink wherever it is in a line's box, using a fake canvas context — it
   doesn't just check one row of pixels, since a real glyph's ink might not
