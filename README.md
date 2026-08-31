@@ -38,8 +38,11 @@ npm test        # run the test suite
   file picker restricted to PDFs, and posts the selected file to
   `/api/upload`.
 - `src/app/api/upload/route.ts` validates the upload (must be a PDF, up to
-  50 MB), then uses [`pdf-parse`](https://www.npmjs.com/package/pdf-parse) to
-  read the PDF's embedded text layer.
+  4 MB — comfortably under Vercel's own ~4.5 MB Serverless Function request
+  body limit, so an oversized file gets a clean error from this route
+  instead of a platform-level rejection with no JSON body), then uses
+  [`pdf-parse`](https://www.npmjs.com/package/pdf-parse) to read the PDF's
+  embedded text layer.
 - If the PDF has little or no embedded text (i.e. it's a scanned document),
   the server tells the client to fall back to OCR instead. The browser then
   renders each page to a canvas with [`pdfjs-dist`](https://www.npmjs.com/package/pdfjs-dist)
@@ -179,7 +182,10 @@ on the client.
   test doesn't actually wait).
 - `revise-paragraph.test.ts` checks the client-side request helper posts
   the current text and instructions to `/api/revise-paragraph` and returns
-  the result, and that it surfaces the server's error message on failure.
+  the result, that it surfaces the server's error message on failure, and
+  that a response whose body isn't valid JSON (a gateway timeout, a
+  platform-level rejection) throws a plain error instead of crashing on
+  the failed parse.
 
 ## Deployment
 

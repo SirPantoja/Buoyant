@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { extractPdfText } from "@/lib/extract-pdf-text";
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+// Vercel's Serverless Functions reject any request body over ~4.5 MB at
+// the platform level, before it ever reaches this handler - and that
+// rejection isn't a JSON response, so the client's `response.json()`
+// throws "Unexpected end of JSON input" instead of getting a clean error
+// message. Enforcing a limit comfortably under that here means a
+// too-large file gets our own friendly error instead.
+const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4 MB
 
 export async function POST(request: Request) {
   let formData: FormData;
@@ -22,7 +28,7 @@ export async function POST(request: Request) {
   }
 
   if (file.size > MAX_FILE_SIZE) {
-    return NextResponse.json({ error: "File exceeds the 50 MB limit." }, { status: 400 });
+    return NextResponse.json({ error: "File exceeds the 4 MB limit." }, { status: 400 });
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());

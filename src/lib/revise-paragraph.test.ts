@@ -38,4 +38,23 @@ describe("reviseParagraph", () => {
       "Instructions can't be empty.",
     );
   });
+
+  it("throws a plain error instead of crashing when the response body isn't valid JSON", async () => {
+    // e.g. a gateway timeout or a platform-level rejection that never
+    // reaches the API route's own JSON error responses.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        json: async () => {
+          throw new SyntaxError("Unexpected end of JSON input");
+        },
+      }),
+    );
+
+    await expect(reviseParagraph({ currentText: "Original", instructions: "Make it punchier" })).rejects.toThrow(
+      "Request failed (502)",
+    );
+  });
 });
