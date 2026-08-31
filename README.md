@@ -29,11 +29,20 @@ paragraph with AI.
    fetch it locally once connected. Everything else works fine without
    either - only that one feature needs them, and fails with a clear
    error instead of a silent no-op if either is unset.
-4. Start the development server:
+4. (Optional) To have paragraph revisions come from the real AI instead of
+   the dummy stand-in, add an Anthropic API key:
+   ```bash
+   echo "ANTHROPIC_API_KEY=sk-ant-..." >> .env.local
+   ```
+   Requests go through `https://hiring-proxy.trybuoyant.ai/anthropic` (see
+   `src/lib/generate-revision.ts`). Without this variable set, revisions
+   still work end-to-end using the dummy response - only the AI-generated
+   text itself is a stand-in.
+5. Start the development server:
    ```bash
    npm run dev
    ```
-5. Open [http://localhost:3000](http://localhost:3000) in your browser and upload a PDF.
+6. Open [http://localhost:3000](http://localhost:3000) in your browser and upload a PDF.
 
 Other useful scripts:
 
@@ -134,11 +143,14 @@ npm test        # run the test suite
 - Clicking a paragraph opens an edit panel to the side with "Submit
   revisions" and "Undo" buttons at its top and a text box below them, where
   you describe the edit you want. Submitting sends that instruction to
-  `/api/revise-paragraph` (`src/lib/revise-paragraph.ts`), which is meant to
-  eventually call a real model but for now runs `generateRevision`
-  (`src/lib/generate-revision.ts`) — a stand-in that waits ~2 seconds and
-  always returns the fixed string `"this is an ai edit"`, so the request/
-  loading/review flow is already real even though the "AI" isn't yet. While
+  `/api/revise-paragraph` (`src/lib/revise-paragraph.ts`), which calls
+  `generateRevision` (`src/lib/generate-revision.ts`). When `ANTHROPIC_API_KEY`
+  is set, that sends the paragraph text and your instructions to Claude
+  (`claude-opus-5`) via `https://hiring-proxy.trybuoyant.ai/anthropic` and
+  returns its revised text. Without the key, it falls back to a stand-in
+  that waits ~2 seconds and always returns the fixed string
+  `"this is an ai edit"`, so the request/loading/review flow works
+  end-to-end even without AI credentials configured. While
   the request is in flight the panel shows a spinner; once a response comes
   back you choose to **Confirm** it (applies to the paragraph, styled and
   set on the same background as the original), **Try again** (resends the
@@ -249,8 +261,11 @@ on the client.
   that undo permanently drops the latest edit while being a no-op once a
   paragraph is back to its original text.
 - `generate-revision.test.ts` checks the dummy AI stand-in resolves with its
-  fixed response only after the simulated delay (using fake timers, so the
-  test doesn't actually wait).
+  fixed response only after the simulated delay when `ANTHROPIC_API_KEY` is
+  unset (using fake timers, so the test doesn't actually wait), and,
+  against a mocked Anthropic client, that setting the key sends the
+  paragraph text and instructions to the hiring proxy and returns its
+  response text, surfacing errors when the call fails or returns no text.
 - `revise-paragraph.test.ts` checks the client-side request helper posts
   the current text and instructions to `/api/revise-paragraph` and returns
   the result, that it surfaces the server's error message on failure, and
