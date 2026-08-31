@@ -64,7 +64,23 @@ export async function generateRevision(currentText: string, instructions: string
   }
   assertValidHeaderValue(apiKey, "ANTHROPIC_API_KEY");
 
-  const client = new Anthropic({ apiKey, baseURL: HIRING_PROXY_BASE_URL, fetch: diagnosticFetch as unknown as typeof fetch });
+  // The hiring proxy sits behind Cloudflare in front of a Railway-hosted
+  // LiteLLM relay (seen via response headers: cf-ray, server: railway-hikari,
+  // x-litellm-*), and its responses have come back with a Vary: Accept-Encoding
+  // header but no Content-Encoding header at all, while the body itself is
+  // binary and doesn't decode as UTF-8 text. Vary: Accept-Encoding without a
+  // matching Content-Encoding is the signature of a response that was
+  // compressed (most likely Brotli, which - unlike gzip/deflate/zstd - has no
+  // fixed magic number, matching what showed up on the wire) somewhere in
+  // that chain while the header naming what codec was used got dropped
+  // before it reached us. Asking for identity encoding sidesteps the whole
+  // class of bug regardless of which hop is responsible.
+  const client = new Anthropic({
+    apiKey,
+    baseURL: HIRING_PROXY_BASE_URL,
+    fetch: diagnosticFetch as unknown as typeof fetch,
+    defaultHeaders: { "Accept-Encoding": "identity" },
+  });
   let response: Anthropic.Message;
   try {
     // Deliberately minimal request body (model/max_tokens/messages only) -
