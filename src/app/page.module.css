@@ -172,7 +172,7 @@
      page instead of sitting in a plain highlight box. No border color
      here either - an edited paragraph should look like a normal part of
      the page until you interact with it, not stay permanently outlined. */
-  overflow: auto;
+  overflow: visible;
   padding: 2px 4px;
 }
 

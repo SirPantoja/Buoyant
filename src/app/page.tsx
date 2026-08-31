@@ -240,7 +240,13 @@ export default function Home() {
                     left: `${(paragraph.x / page.width) * 100}%`,
                     top: `${(paragraph.y / page.height) * 100}%`,
                     width: `${(paragraph.width / page.width) * 100}%`,
-                    height: `${(paragraph.height / page.height) * 100}%`,
+                    // An edited paragraph gets a height *floor* rather than a
+                    // fixed height, so replacement text longer than the
+                    // original (e.g. expanding a one-liner) grows the box
+                    // downward instead of clipping and needing a scrollbar.
+                    ...(edited
+                      ? { minHeight: `${(paragraph.height / page.height) * 100}%` }
+                      : { height: `${(paragraph.height / page.height) * 100}%` }),
                     // Matches the page background sampled from behind the
                     // original text, rather than a plain highlight color, so
                     // the edit blends into the page. Set here (inline) rather
