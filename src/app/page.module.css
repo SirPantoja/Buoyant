@@ -148,6 +148,45 @@
   padding: 0 24px 60px;
 }
 
+.emailSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 24px 60px;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--foreground);
+  color: var(--text-primary);
+}
+
+.emailSectionTitle {
+  margin: 0;
+  font-size: 16px;
+}
+
+.emailSectionHint {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.emailForm {
+  display: flex;
+  gap: 8px;
+}
+
+.emailForm input[type="email"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.emailForm .editSubmit {
+  flex: 0 0 auto;
+}
+
 .pages {
   display: flex;
   flex-direction: column;

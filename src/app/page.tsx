@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { buildEditedPdf } from "@/lib/build-edited-pdf";
 import { detectEmbeddedTextInFile } from "@/lib/detect-embedded-text";
 import { renderPdfWithOcr, type OcrProgress } from "@/lib/ocr";
 import {
@@ -15,6 +16,7 @@ import {
 import type { RenderedPage } from "@/lib/pdf-paragraphs";
 import { renderEmbeddedPdfPages } from "@/lib/render-pdf-pages";
 import { reviseParagraph } from "@/lib/revise-paragraph";
+import { sendPdfByEmail } from "@/lib/send-pdf-request";
 import styles from "./page.module.css";
 
 type UploadResult = {
@@ -28,6 +30,14 @@ type UploadResult = {
 // work around any request-size ceiling.
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
+// The edited PDF is uploaded directly to Vercel Blob storage rather than
+// through a Serverless Function (see send-pdf-request.ts), so Vercel's
+// own ~4.5 MB request-body limit doesn't apply here - the real ceiling is
+// Resend's own attachment size limit (~40 MB per email). Checking
+// client-side first, with some margin, means an oversized PDF gets a
+// clear message instead of a failure partway through sending.
+const MAX_EMAIL_ATTACHMENT_SIZE = 35 * 1024 * 1024; // 35 MB
+
 type Status = "idle" | "reading" | "rendering" | "ocr" | "success" | "error";
 
 // The AI revision flow for whichever paragraph is selected:
@@ -36,6 +46,10 @@ type Status = "idle" | "reading" | "rendering" | "ocr" | "success" | "error";
 // reviewing - a response came back; the user must confirm, retry, or edit
 // their instructions before anything is applied to the paragraph.
 type EditPhase = "idle" | "loading" | "reviewing";
+
+// The "email me the edited PDF" flow, separate from the per-paragraph one
+// above since it applies to the whole document rather than one paragraph.
+type EmailPhase = "idle" | "sending" | "sent";
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -50,6 +64,12 @@ export default function Home() {
   const [editPhase, setEditPhase] = useState<EditPhase>("idle");
   const [aiResponse, setAiResponse] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailPhase, setEmailPhase] = useState<EmailPhase>("idle");
+  const [emailError, setEmailError] = useState<string | null>(null);
+  // The originally uploaded file, kept around so the "email me the PDF"
+  // flow can rebuild it with edits drawn in - see build-edited-pdf.ts.
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,6 +100,10 @@ export default function Home() {
     setOcrProgress(null);
     setEditState({});
     resetEditPanel();
+    setEmailInput("");
+    setEmailPhase("idle");
+    setEmailError(null);
+    setSourceFile(file);
 
     try {
       // Runs entirely client-side (see detect-embedded-text.ts) rather
@@ -170,6 +194,32 @@ export default function Home() {
     setEditState((prev) => undoEdit(prev, selectedKey));
   }
 
+  async function handleSendPdf(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const email = emailInput.trim();
+    if (email.length === 0 || !sourceFile || !pages) {
+      return;
+    }
+
+    setEmailPhase("sending");
+    setEmailError(null);
+
+    try {
+      const pdfBytes = await buildEditedPdf(sourceFile, pages, editState);
+
+      if (pdfBytes.byteLength > MAX_EMAIL_ATTACHMENT_SIZE) {
+        throw new Error("The edited PDF is too large to email (over 35 MB). Try a shorter document.");
+      }
+
+      await sendPdfByEmail(email, pdfBytes, sourceFile.name);
+      setEmailPhase("sent");
+    } catch (error) {
+      setEmailPhase("idle");
+      setEmailError(error instanceof Error ? error.message : "Something went wrong.");
+    }
+  }
+
   const busy = status === "reading" || status === "rendering" || status === "ocr";
   const selectedHistory = selectedKey ? editState[selectedKey] : undefined;
 
@@ -219,179 +269,222 @@ export default function Home() {
       </main>
 
       {status === "success" && pages && pages.length > 0 && (
-        <div className={styles.viewer}>
-          <div className={styles.pages}>
-            {pages.map((page, pageIndex) => (
-              <div
-                key={pageIndex}
-                className={styles.pageWrapper}
-                style={{ aspectRatio: `${page.width} / ${page.height}` }}
-              >
-                {/* Rendered client-side from the PDF, so it's a data URL rather than a static asset. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={page.dataUrl} alt={`Page ${pageIndex + 1}`} className={styles.pageImage} />
-                {page.paragraphs.map((paragraph, paragraphIndex) => {
-                  const key = paragraphKey(pageIndex, paragraphIndex);
-                  const edited = hasEdits(editState, key);
-                  const currentText = getCurrentText(editState, key) ?? paragraph.text;
-                  const boxStyle = {
-                    left: `${(paragraph.x / page.width) * 100}%`,
-                    top: `${(paragraph.y / page.height) * 100}%`,
-                    // An edited paragraph gets width/height *floors* rather
-                    // than a fixed size: `fit-content` first grows the box
-                    // sideways to fit replacement text that still reads as
-                    // one line, up to the page's right edge (maxWidth), and
-                    // only wraps - growing the box downward instead, via
-                    // minHeight - once it hits that edge. So a short
-                    // replacement widens in place, and only a long one
-                    // reflows and grows vertically, rather than every edit
-                    // immediately wrapping and needing a scrollbar.
-                    ...(edited
-                      ? {
-                          width: "fit-content",
-                          minWidth: `${(paragraph.width / page.width) * 100}%`,
-                          maxWidth: `${((page.width - paragraph.x) / page.width) * 100}%`,
-                          minHeight: `${(paragraph.height / page.height) * 100}%`,
-                        }
-                      : {
-                          width: `${(paragraph.width / page.width) * 100}%`,
-                          height: `${(paragraph.height / page.height) * 100}%`,
-                        }),
-                    // Matches the page background sampled from behind the
-                    // original text, rather than a plain highlight color, so
-                    // the edit blends into the page. Set here (inline) rather
-                    // than in CSS so it also always wins over the generic
-                    // hover tint below, whether hovered or not.
-                    ...(edited ? { backgroundColor: paragraph.backgroundColor } : {}),
-                  };
-                  // Sized in container-width units (relative to the page
-                  // image's own rendered width, via `.pageWrapper`'s
-                  // `container-type: inline-size`) so edited text keeps the
-                  // original's proportions as the page scales responsively.
-                  const editedTextStyle = {
-                    fontFamily: paragraph.fontFamily,
-                    color: paragraph.color,
-                    fontSize: `calc(${paragraph.fontSize} / ${page.width} * 100cqw)`,
-                  };
+        <>
+          <div className={styles.viewer}>
+            <div className={styles.pages}>
+              {pages.map((page, pageIndex) => (
+                <div
+                  key={pageIndex}
+                  className={styles.pageWrapper}
+                  style={{ aspectRatio: `${page.width} / ${page.height}` }}
+                >
+                  {/* Rendered client-side from the PDF, so it's a data URL rather than a static asset. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={page.dataUrl} alt={`Page ${pageIndex + 1}`} className={styles.pageImage} />
+                  {page.paragraphs.map((paragraph, paragraphIndex) => {
+                    const key = paragraphKey(pageIndex, paragraphIndex);
+                    const edited = hasEdits(editState, key);
+                    const currentText = getCurrentText(editState, key) ?? paragraph.text;
+                    const boxStyle = {
+                      left: `${(paragraph.x / page.width) * 100}%`,
+                      top: `${(paragraph.y / page.height) * 100}%`,
+                      // An edited paragraph gets width/height *floors* rather
+                      // than a fixed size: `fit-content` first grows the box
+                      // sideways to fit replacement text that still reads as
+                      // one line, up to the page's right edge (maxWidth), and
+                      // only wraps - growing the box downward instead, via
+                      // minHeight - once it hits that edge. So a short
+                      // replacement widens in place, and only a long one
+                      // reflows and grows vertically, rather than every edit
+                      // immediately wrapping and needing a scrollbar.
+                      ...(edited
+                        ? {
+                            width: "fit-content",
+                            minWidth: `${(paragraph.width / page.width) * 100}%`,
+                            maxWidth: `${((page.width - paragraph.x) / page.width) * 100}%`,
+                            minHeight: `${(paragraph.height / page.height) * 100}%`,
+                          }
+                        : {
+                            width: `${(paragraph.width / page.width) * 100}%`,
+                            height: `${(paragraph.height / page.height) * 100}%`,
+                          }),
+                      // Matches the page background sampled from behind the
+                      // original text, rather than a plain highlight color, so
+                      // the edit blends into the page. Set here (inline) rather
+                      // than in CSS so it also always wins over the generic
+                      // hover tint below, whether hovered or not.
+                      ...(edited ? { backgroundColor: paragraph.backgroundColor } : {}),
+                    };
+                    // Sized in container-width units (relative to the page
+                    // image's own rendered width, via `.pageWrapper`'s
+                    // `container-type: inline-size`) so edited text keeps the
+                    // original's proportions as the page scales responsively.
+                    const editedTextStyle = {
+                      fontFamily: paragraph.fontFamily,
+                      color: paragraph.color,
+                      fontSize: `calc(${paragraph.fontSize} / ${page.width} * 100cqw)`,
+                    };
 
-                  return (
-                    <div
-                      key={paragraphIndex}
-                      className={`${styles.paragraphBox} ${edited ? styles.paragraphBoxEdited : ""} ${
-                        selectedKey === key ? styles.paragraphBoxSelected : ""
-                      }`}
-                      title={currentText}
-                      onClick={() => handleSelectParagraph(key)}
-                      style={boxStyle}
-                    >
-                      {edited && (
-                        <span className={styles.editedText} style={editedTextStyle}>
-                          {currentText}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+                    return (
+                      <div
+                        key={paragraphIndex}
+                        className={`${styles.paragraphBox} ${edited ? styles.paragraphBoxEdited : ""} ${
+                          selectedKey === key ? styles.paragraphBoxSelected : ""
+                        }`}
+                        title={currentText}
+                        onClick={() => handleSelectParagraph(key)}
+                        style={boxStyle}
+                      >
+                        {edited && (
+                          <span className={styles.editedText} style={editedTextStyle}>
+                            {currentText}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+
+            <aside className={styles.editPanel}>
+              {selectedKey && selectedHistory ? (
+                <>
+                  <div className={styles.editActions}>
+                    {editPhase === "idle" && (
+                      <>
+                        <button
+                          type="button"
+                          className={styles.editSubmit}
+                          onClick={requestRevision}
+                          disabled={draftEdit.trim().length === 0}
+                        >
+                          Submit revisions
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.editUndo}
+                          onClick={handleUndo}
+                          disabled={!hasEdits(editState, selectedKey)}
+                        >
+                          Undo
+                        </button>
+                      </>
+                    )}
+
+                    {editPhase === "loading" && (
+                      <div className={styles.editLoading} role="status">
+                        <span className={styles.spinner} aria-hidden="true" />
+                        Getting AI revision...
+                      </div>
+                    )}
+
+                    {editPhase === "reviewing" && (
+                      <div className={styles.editReviewActions}>
+                        <button type="button" className={styles.editSubmit} onClick={handleConfirm}>
+                          Confirm
+                        </button>
+                        <div className={styles.editReviewSecondary}>
+                          <button type="button" className={styles.editUndo} onClick={requestRevision}>
+                            Try again
+                          </button>
+                          <button type="button" className={styles.editUndo} onClick={handleTryAgainWithEdits}>
+                            Try again with edits
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className={styles.editPanelBody}>
+                    <h2 className={styles.editPanelTitle}>Edit paragraph</h2>
+                    <p className={styles.editPanelCurrent}>{selectedHistory[selectedHistory.length - 1]}</p>
+                    <textarea
+                      className={styles.editTextarea}
+                      value={draftEdit}
+                      onChange={(event) => setDraftEdit(event.target.value)}
+                      rows={5}
+                      placeholder="Describe the edit you want..."
+                      disabled={editPhase !== "idle"}
+                    />
+
+                    {editPhase === "reviewing" && aiResponse !== null && (
+                      <div className={styles.editAiResponse}>
+                        <h3 className={styles.editAiResponseTitle}>AI suggestion</h3>
+                        <p>{aiResponse}</p>
+                      </div>
+                    )}
+
+                    {editError && (
+                      <p role="alert" className={styles.error}>
+                        {editError}
+                      </p>
+                    )}
+
+                    {selectedHistory.length > 1 && (
+                      <div className={styles.editHistory}>
+                        <h3 className={styles.editHistoryTitle}>History</h3>
+                        <ol className={styles.editHistoryList}>
+                          {selectedHistory.map((entry, index) => (
+                            <li key={index}>
+                              <span className={styles.editHistoryLabel}>
+                                {index === 0 ? "Original" : `Edit ${index}`}
+                              </span>
+                              {entry}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className={styles.editPanelPlaceholder}>Click a paragraph to edit it.</p>
+              )}
+            </aside>
           </div>
 
-          <aside className={styles.editPanel}>
-            {selectedKey && selectedHistory ? (
-              <>
-                <div className={styles.editActions}>
-                  {editPhase === "idle" && (
-                    <>
-                      <button
-                        type="button"
-                        className={styles.editSubmit}
-                        onClick={requestRevision}
-                        disabled={draftEdit.trim().length === 0}
-                      >
-                        Submit revisions
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.editUndo}
-                        onClick={handleUndo}
-                        disabled={!hasEdits(editState, selectedKey)}
-                      >
-                        Undo
-                      </button>
-                    </>
-                  )}
+          <section className={styles.emailSection}>
+            <h2 className={styles.emailSectionTitle}>Email the edited PDF</h2>
+            <p className={styles.emailSectionHint}>
+              Enter your email and we&apos;ll send you a copy of the PDF with your revisions applied.
+            </p>
+            <form onSubmit={handleSendPdf} className={styles.emailForm}>
+              <input
+                type="email"
+                className={styles.editTextarea}
+                value={emailInput}
+                onChange={(event) => {
+                  setEmailInput(event.target.value);
+                  setEmailPhase("idle");
+                  setEmailError(null);
+                }}
+                placeholder="you@example.com"
+                disabled={emailPhase === "sending"}
+                required
+              />
+              <button
+                type="submit"
+                className={styles.editSubmit}
+                disabled={emailPhase === "sending" || emailInput.trim().length === 0}
+              >
+                {emailPhase === "sending" ? "Sending..." : "Send PDF"}
+              </button>
+            </form>
 
-                  {editPhase === "loading" && (
-                    <div className={styles.editLoading} role="status">
-                      <span className={styles.spinner} aria-hidden="true" />
-                      Getting AI revision...
-                    </div>
-                  )}
-
-                  {editPhase === "reviewing" && (
-                    <div className={styles.editReviewActions}>
-                      <button type="button" className={styles.editSubmit} onClick={handleConfirm}>
-                        Confirm
-                      </button>
-                      <div className={styles.editReviewSecondary}>
-                        <button type="button" className={styles.editUndo} onClick={requestRevision}>
-                          Try again
-                        </button>
-                        <button type="button" className={styles.editUndo} onClick={handleTryAgainWithEdits}>
-                          Try again with edits
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className={styles.editPanelBody}>
-                  <h2 className={styles.editPanelTitle}>Edit paragraph</h2>
-                  <p className={styles.editPanelCurrent}>{selectedHistory[selectedHistory.length - 1]}</p>
-                  <textarea
-                    className={styles.editTextarea}
-                    value={draftEdit}
-                    onChange={(event) => setDraftEdit(event.target.value)}
-                    rows={5}
-                    placeholder="Describe the edit you want..."
-                    disabled={editPhase !== "idle"}
-                  />
-
-                  {editPhase === "reviewing" && aiResponse !== null && (
-                    <div className={styles.editAiResponse}>
-                      <h3 className={styles.editAiResponseTitle}>AI suggestion</h3>
-                      <p>{aiResponse}</p>
-                    </div>
-                  )}
-
-                  {editError && (
-                    <p role="alert" className={styles.error}>
-                      {editError}
-                    </p>
-                  )}
-
-                  {selectedHistory.length > 1 && (
-                    <div className={styles.editHistory}>
-                      <h3 className={styles.editHistoryTitle}>History</h3>
-                      <ol className={styles.editHistoryList}>
-                        {selectedHistory.map((entry, index) => (
-                          <li key={index}>
-                            <span className={styles.editHistoryLabel}>
-                              {index === 0 ? "Original" : `Edit ${index}`}
-                            </span>
-                            {entry}
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <p className={styles.editPanelPlaceholder}>Click a paragraph to edit it.</p>
+            {emailPhase === "sent" && (
+              <p role="status" className={styles.resultStatus}>
+                Sent! Check your inbox at <strong>{emailInput.trim()}</strong>.
+              </p>
             )}
-          </aside>
-        </div>
+
+            {emailError && (
+              <p role="alert" className={styles.error}>
+                {emailError}
+              </p>
+            )}
+          </section>
+        </>
       )}
     </div>
   );
