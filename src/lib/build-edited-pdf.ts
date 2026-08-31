@@ -4,6 +4,15 @@ import type { ParagraphBox, RenderedPage } from "./pdf-paragraphs";
 
 const PADDING = 2;
 
+// A paragraph's on-screen bounding box is derived from pdf.js's reported
+// text-item height, which doesn't always match a font's true visual ink
+// extent - tall capitals and accented characters especially can render
+// slightly above a "tight" box. Extending the covering rectangle by a
+// little more than the box's own bounds (rather than drawing exactly to
+// them) keeps the original text's ascenders/descenders from peeking out
+// from behind the replacement.
+const VERTICAL_OVERDRAW_RATIO = 0.25;
+
 // Parses the `rgb(r, g, b)` strings pdf-paragraphs.ts produces into
 // pdf-lib's 0-1 float color format.
 function parseRgb(value: string): { r: number; g: number; b: number } {
@@ -61,10 +70,12 @@ function drawEditedParagraph(
 ): void {
   const boxX = paragraph.x * scaleX;
   const boxWidth = paragraph.width * scaleX;
-  const boxTopFromPageTop = paragraph.y * scaleY;
-  const originalBoxHeight = paragraph.height * scaleY;
   const fontSize = Math.max(6, paragraph.fontSize * scaleY);
   const lineHeight = fontSize * 1.3;
+  const overdraw = fontSize * VERTICAL_OVERDRAW_RATIO;
+
+  const boxTopFromPageTop = paragraph.y * scaleY - overdraw;
+  const originalBoxHeight = paragraph.height * scaleY + overdraw * 2;
 
   const lineCount = estimateLineCount(font, text, fontSize, boxWidth - PADDING * 2);
   const neededHeight = lineCount * lineHeight + PADDING * 2;
