@@ -6,21 +6,22 @@ describe("sendPdfByEmail", () => {
     vi.unstubAllGlobals();
   });
 
-  it("posts the email address and resolves on success", async () => {
+  it("posts the email address and PDF bytes as form data, and resolves on success", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(sendPdfByEmail("someone@example.com")).resolves.toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/send-pdf",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ email: "someone@example.com" }),
-      }),
-    );
+    await expect(sendPdfByEmail("someone@example.com", new Uint8Array([1, 2, 3]), "edited.pdf")).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/send-pdf", expect.objectContaining({ method: "POST" }));
+    const body = fetchMock.mock.calls[0][1].body as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    expect(body.get("email")).toBe("someone@example.com");
+    const pdfField = body.get("pdf");
+    expect(pdfField).toBeInstanceOf(Blob);
+    expect((pdfField as File).name).toBe("edited.pdf");
   });
 
   it("throws with the server's error message when the request fails", async () => {
@@ -32,7 +33,9 @@ describe("sendPdfByEmail", () => {
       }),
     );
 
-    await expect(sendPdfByEmail("not-an-email")).rejects.toThrow("Enter a valid email address.");
+    await expect(sendPdfByEmail("not-an-email", new Uint8Array(), "edited.pdf")).rejects.toThrow(
+      "Enter a valid email address.",
+    );
   });
 
   it("throws a plain error instead of crashing when the response body isn't valid JSON", async () => {
@@ -47,6 +50,8 @@ describe("sendPdfByEmail", () => {
       }),
     );
 
-    await expect(sendPdfByEmail("someone@example.com")).rejects.toThrow("Request failed (502)");
+    await expect(sendPdfByEmail("someone@example.com", new Uint8Array(), "edited.pdf")).rejects.toThrow(
+      "Request failed (502)",
+    );
   });
 });

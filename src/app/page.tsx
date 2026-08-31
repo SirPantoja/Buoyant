@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { buildEditedPdf } from "@/lib/build-edited-pdf";
 import { detectEmbeddedTextInFile } from "@/lib/detect-embedded-text";
 import { renderPdfWithOcr, type OcrProgress } from "@/lib/ocr";
 import {
@@ -28,6 +29,14 @@ type UploadResult = {
 // only to keep an accidental huge upload from stalling the page, not to
 // work around any request-size ceiling.
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+
+// Unlike the upload above, the edited PDF has to reach the server to be
+// attached and sent (the email API key can't safely live in the
+// browser), so this one is a real limit: Vercel's Serverless Functions
+// reject any request body over ~4.5 MB at the platform level. Checking
+// client-side first means an oversized PDF gets a clear message instead
+// of a platform-level rejection.
+const MAX_EMAIL_ATTACHMENT_SIZE = 4 * 1024 * 1024; // 4 MB
 
 type Status = "idle" | "reading" | "rendering" | "ocr" | "success" | "error";
 
@@ -58,6 +67,9 @@ export default function Home() {
   const [emailInput, setEmailInput] = useState("");
   const [emailPhase, setEmailPhase] = useState<EmailPhase>("idle");
   const [emailError, setEmailError] = useState<string | null>(null);
+  // The originally uploaded file, kept around so the "email me the PDF"
+  // flow can rebuild it with edits drawn in - see build-edited-pdf.ts.
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -91,6 +103,7 @@ export default function Home() {
     setEmailInput("");
     setEmailPhase("idle");
     setEmailError(null);
+    setSourceFile(file);
 
     try {
       // Runs entirely client-side (see detect-embedded-text.ts) rather
@@ -185,7 +198,7 @@ export default function Home() {
     event.preventDefault();
 
     const email = emailInput.trim();
-    if (email.length === 0) {
+    if (email.length === 0 || !sourceFile || !pages) {
       return;
     }
 
@@ -193,7 +206,13 @@ export default function Home() {
     setEmailError(null);
 
     try {
-      await sendPdfByEmail(email);
+      const pdfBytes = await buildEditedPdf(sourceFile, pages, editState);
+
+      if (pdfBytes.byteLength > MAX_EMAIL_ATTACHMENT_SIZE) {
+        throw new Error("The edited PDF is too large to email (over 4 MB). Try a shorter document.");
+      }
+
+      await sendPdfByEmail(email, pdfBytes, sourceFile.name);
       setEmailPhase("sent");
     } catch (error) {
       setEmailPhase("idle");

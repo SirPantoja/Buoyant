@@ -16,11 +16,18 @@ paragraph with AI.
    ```bash
    npm install
    ```
-3. Start the development server:
+3. (Optional) To let the "email me the edited PDF" feature actually send
+   mail, create `.env.local` with a [Resend](https://resend.com) API key:
+   ```bash
+   echo "RESEND_API_KEY=re_..." > .env.local
+   ```
+   Everything else works fine without it - only that one route needs it,
+   and fails with a clear error instead of a silent no-op if it's unset.
+4. Start the development server:
    ```bash
    npm run dev
    ```
-4. Open [http://localhost:3000](http://localhost:3000) in your browser and upload a PDF.
+5. Open [http://localhost:3000](http://localhost:3000) in your browser and upload a PDF.
 
 Other useful scripts:
 
@@ -151,14 +158,35 @@ npm test        # run the test suite
   container for it — see the comment in `src/app/globals.css` for the
   overflow-axis quirk that broke this at first.
 - Below the viewer, an email field lets you send yourself a copy of the
-  edited PDF. Submitting it posts the address to `/api/send-pdf`
-  (`src/lib/send-pdf-request.ts`), which is meant to eventually build the
-  edited PDF and email it through a real provider (e.g. Resend, SendGrid),
-  but for now runs `sendPdfEmail` (`src/lib/send-pdf-email.ts`) — a
-  stand-in that waits ~1.5 seconds and always succeeds, the same pattern
-  `generate-revision.ts` uses for the AI stand-in above. The email address
-  is validated both by the input's own `type="email"` and again on the
-  server before the stand-in runs.
+  edited PDF. `src/lib/build-edited-pdf.ts` rebuilds the *original* PDF
+  file (not a fresh render from the page images) with each edited
+  paragraph's replacement text drawn over its original position - a
+  filled rectangle in the sampled background color, then the new text in
+  the original's size and color (font family isn't preserved; the browser
+  doesn't have the original font file to embed, so edits render in
+  Helvetica). Reusing the original file rather than re-rendering keeps the
+  output close to its original size, and any page with no edits on it
+  comes through completely unchanged. That PDF, along with the typed
+  address, is posted as multipart form data (not JSON - the file is real
+  bytes, not something worth base64-inflating) to `/api/send-pdf`, which
+  validates both and calls `sendPdfEmail` (`src/lib/send-pdf-email.ts`) to
+  actually send it through [Resend](https://resend.com). This needs a
+  `RESEND_API_KEY` environment variable to work - set locally in
+  `.env.local` (gitignored, never commit a real key) and in your hosting
+  platform's own environment variable settings for a real deployment;
+  without it, the route fails with a clear "Email sending isn't
+  configured" error instead of a silent no-op. Sends go out from Resend's
+  shared `onboarding@resend.dev` address, which Resend restricts to
+  emailing the account's own verified address until a custom sending
+  domain is verified - sending to any other address fails with Resend's
+  own error message, surfaced as-is rather than swallowed. The address is
+  validated both by the input's own `type="email"` and again on the
+  server. Unlike the rest of the upload/edit flow, this one *does* have to
+  post a real payload to a server route (the API key can't safely live in
+  the browser), so the edited PDF is capped at 4 MB client-side before the
+  request is even made - comfortably under Vercel's own ~4.5 MB
+  Serverless Function request-body limit - rather than let an oversized
+  one hit that limit and fail with an unclear error.
 
 Note: OCR downloads its recognition engine and language data from a CDN the
 first time it runs in a given browser, so it requires normal internet access
@@ -214,13 +242,23 @@ on the client.
   that a response whose body isn't valid JSON (a gateway timeout, a
   platform-level rejection) throws a plain error instead of crashing on
   the failed parse.
-- `send-pdf-email.test.ts` checks the dummy email-sending stand-in
-  resolves only after the simulated delay (using fake timers).
+- `build-edited-pdf.test.ts` checks the PDF-rebuilding step against the
+  real `digital.pdf` fixture: an edited paragraph's replacement text
+  actually appears in the output (reading it back with `pdfjs-dist`, the
+  same way `detect-embedded-text.test.ts` does), a paragraph with no
+  confirmed edits is left untouched, and the output has a page for every
+  page of the input even when nothing on it changed.
+- `send-pdf-email.test.ts` mocks the `resend` package to check
+  `sendPdfEmail` sends the PDF bytes as a named attachment, throws a
+  clear error when `RESEND_API_KEY` isn't set (without calling Resend at
+  all), and surfaces Resend's own error message on failure rather than a
+  generic one.
 - `send-pdf-request.test.ts` checks the client-side request helper posts
-  the email address to `/api/send-pdf`, that it surfaces the server's
-  error message on failure, and that a non-JSON response throws a plain
-  error instead of crashing on the failed parse - the same three cases as
-  `revise-paragraph.test.ts`, for the same reasons.
+  the email address and PDF bytes as form data to `/api/send-pdf`, that
+  it surfaces the server's error message on failure, and that a non-JSON
+  response throws a plain error instead of crashing on the failed parse -
+  the same three cases as `revise-paragraph.test.ts`, for the same
+  reasons.
 
 ## Deployment
 

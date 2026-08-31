@@ -1,12 +1,33 @@
-// Stands in for a real email-delivery integration (e.g. Resend, SendGrid,
-// AWS SES) - no such service is configured in this project. Kept isolated
-// behind this one function, the same way generate-revision.ts stands in
-// for a real model call, so swapping in an actual send later only means
-// changing what happens here, not the request/response flow around it. A
-// real implementation would also take the edited PDF's bytes to attach.
-const SIMULATED_LATENCY_MS = 1500;
+import { Resend } from "resend";
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- signature matches the real call this will become
-export async function sendPdfEmail(email: string): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, SIMULATED_LATENCY_MS));
+// Real email delivery via Resend (https://resend.com). Requires
+// RESEND_API_KEY to be set - locally in .env.local (gitignored, never
+// committed), in production via the hosting platform's own environment
+// variable settings.
+//
+// Sends from Resend's shared onboarding@resend.dev address, since no
+// custom domain is verified for this project. Resend only allows that
+// address to send to the account's own verified email until a domain is
+// verified - sending to any other address will fail with a clear error
+// from Resend itself, surfaced by the try/catch around this call in
+// src/app/api/send-pdf/route.ts.
+export async function sendPdfEmail(email: string, pdfBytes: Uint8Array, fileName: string): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error("Email sending isn't configured yet (missing RESEND_API_KEY).");
+  }
+
+  const resend = new Resend(apiKey);
+
+  const { error } = await resend.emails.send({
+    from: "Buoyant <onboarding@resend.dev>",
+    to: email,
+    subject: "Your edited PDF from Buoyant",
+    text: "Attached is your PDF with the requested revisions applied.",
+    attachments: [{ filename: fileName, content: Buffer.from(pdfBytes) }],
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }

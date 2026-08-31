@@ -7,24 +7,37 @@ import { sendPdfEmail } from "@/lib/send-pdf-email";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: Request) {
-  let body: unknown;
+  let formData: FormData;
   try {
-    body = await request.json();
+    formData = await request.formData();
   } catch {
-    return NextResponse.json({ error: "Expected a JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Expected multipart form data." }, { status: 400 });
   }
 
-  if (typeof body !== "object" || body === null || typeof (body as Record<string, unknown>).email !== "string") {
-    return NextResponse.json({ error: "Expected an email string." }, { status: 400 });
+  const email = formData.get("email");
+  if (typeof email !== "string") {
+    return NextResponse.json({ error: "Expected an email address." }, { status: 400 });
   }
 
-  const email = (body as { email: string }).email.trim();
-
-  if (!EMAIL_PATTERN.test(email)) {
+  const trimmedEmail = email.trim();
+  if (!EMAIL_PATTERN.test(trimmedEmail)) {
     return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
   }
 
-  await sendPdfEmail(email);
+  const pdf = formData.get("pdf");
+  if (!(pdf instanceof File)) {
+    return NextResponse.json({ error: "No PDF was provided." }, { status: 400 });
+  }
+
+  const pdfBytes = new Uint8Array(await pdf.arrayBuffer());
+
+  try {
+    await sendPdfEmail(trimmedEmail, pdfBytes, pdf.name || "edited.pdf");
+  } catch (err) {
+    console.error("sendPdfEmail failed", err);
+    const message = err instanceof Error ? err.message : "Failed to send the email.";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 
   return NextResponse.json({ success: true });
 }

@@ -1,28 +1,55 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { sendPdfEmail } from "./send-pdf-email";
 
+const sendMock = vi.fn();
+
+vi.mock("resend", () => ({
+  Resend: class {
+    emails = { send: sendMock };
+  },
+}));
+
 describe("sendPdfEmail", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
+  const originalApiKey = process.env.RESEND_API_KEY;
 
   afterEach(() => {
-    vi.useRealTimers();
+    sendMock.mockReset();
+    process.env.RESEND_API_KEY = originalApiKey;
   });
 
-  it("resolves after a simulated delay", async () => {
-    const promise = sendPdfEmail("someone@example.com");
+  it("throws a clear error when RESEND_API_KEY isn't configured", async () => {
+    delete process.env.RESEND_API_KEY;
 
-    let resolved = false;
-    promise.then(() => {
-      resolved = true;
+    await expect(sendPdfEmail("someone@example.com", new Uint8Array(), "edited.pdf")).rejects.toThrow(
+      "RESEND_API_KEY",
+    );
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("sends the PDF bytes as a named attachment", async () => {
+    process.env.RESEND_API_KEY = "test-key";
+    sendMock.mockResolvedValue({ data: { id: "abc" }, error: null });
+
+    const pdfBytes = new Uint8Array([1, 2, 3]);
+    await sendPdfEmail("someone@example.com", pdfBytes, "edited.pdf");
+
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "someone@example.com",
+        attachments: [{ filename: "edited.pdf", content: Buffer.from(pdfBytes) }],
+      }),
+    );
+  });
+
+  it("throws with Resend's own error message on failure", async () => {
+    process.env.RESEND_API_KEY = "test-key";
+    sendMock.mockResolvedValue({
+      data: null,
+      error: { message: "You can only send testing emails to your own email address." },
     });
 
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(resolved).toBe(false);
-
-    await vi.advanceTimersByTimeAsync(1000);
-    await expect(promise).resolves.toBeUndefined();
-    expect(resolved).toBe(true);
+    await expect(sendPdfEmail("someone-else@example.com", new Uint8Array(), "edited.pdf")).rejects.toThrow(
+      "You can only send testing emails to your own email address.",
+    );
   });
 });

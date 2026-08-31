@@ -1,8 +1,13 @@
-export async function sendPdfByEmail(email: string): Promise<void> {
+export async function sendPdfByEmail(email: string, pdfBytes: Uint8Array, fileName: string): Promise<void> {
+  const formData = new FormData();
+  formData.append("email", email);
+  // Uint8Array isn't directly a valid Blob part in all environments, so
+  // wrap it in an ArrayBuffer copy first.
+  formData.append("pdf", new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" }), fileName);
+
   const response = await fetch("/api/send-pdf", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
+    body: formData,
   });
 
   let data: { success?: boolean; error?: string };
