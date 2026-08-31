@@ -63,7 +63,11 @@ npm test        # run the test suite
   neither source exposes either directly. The background sample is what
   lets a confirmed edit's overlay sit on the same background as the
   original text (a colored callout box, a tinted page, etc.) instead of a
-  plain highlight color, so it blends into the page. Paragraphs split on
+  plain highlight color; an edited paragraph also has no visible border
+  of its own, so once you click away it looks like an ordinary part of
+  the page rather than staying permanently boxed - the accent-colored
+  border only ever shows on hover or while it's the one currently
+  selected for editing, same as any other paragraph. Paragraphs split on
   any of three
   signals: a line whose font size is clearly different from the line
   before it (a heading immediately above body text), a vertical gap

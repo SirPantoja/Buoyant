@@ -169,15 +169,17 @@
 .paragraphBoxEdited {
   /* Background is set inline per paragraph (the page color sampled from
      behind the original text), not here, so the edit blends into the
-     page instead of sitting in a plain highlight box. */
-  border-color: var(--edited-border);
+     page instead of sitting in a plain highlight box. No border color
+     here either - an edited paragraph should look like a normal part of
+     the page until you interact with it, not stay permanently outlined. */
   overflow: auto;
   padding: 2px 4px;
 }
 
-/* Keeps the amber border on hover instead of the generic hover's blue
-   one - the background itself doesn't need an override here since it's
-   set inline and always wins over this rule's translucent tint anyway. */
+/* Amber instead of the generic hover's blue, so hovering still tells an
+   edited paragraph apart from an unedited one - the background itself
+   doesn't need an override here since it's set inline and always wins
+   over this rule's translucent tint anyway. */
 .paragraphBoxEdited:hover {
   border-color: var(--edited-border);
 }
