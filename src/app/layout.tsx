@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Buoyant PDF Upload",
-  description: "Upload a PDF file",
+  title: "Buoyant AI Proposal Revising",
+  description: "Upload a PDF and revise it paragraph by paragraph with AI.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -16,13 +16,9 @@ import { renderEmbeddedPdfPages } from "@/lib/render-pdf-pages";
 import { reviseParagraph } from "@/lib/revise-paragraph";
 import styles from "./page.module.css";
 
-type Source = "embedded" | "ocr";
-
 type UploadResult = {
   name: string;
   size: number;
-  text: string;
-  source: Source;
 };
 
 type UploadResponse = {
@@ -85,21 +81,18 @@ export default function Home() {
       }
 
       let renderedPages: RenderedPage[];
-      let text: string;
 
       if (data.source === "embedded" && data.text !== null) {
         setStatus("rendering");
         renderedPages = await renderEmbeddedPdfPages(file);
-        text = data.text;
       } else {
         // No usable text layer, so this is likely a scan: run OCR in the browser.
         setStatus("ocr");
         const ocrResult = await renderPdfWithOcr(file, setOcrProgress);
         renderedPages = ocrResult.pages;
-        text = ocrResult.text;
       }
 
-      setResult({ name: data.name, size: data.size, text, source: data.source === "embedded" ? "embedded" : "ocr" });
+      setResult({ name: data.name, size: data.size });
       setPages(renderedPages);
       setEditState(buildInitialEditState(renderedPages));
       setStatus("success");
@@ -175,8 +168,12 @@ export default function Home() {
 
   return (
     <div className={styles.page}>
+      <header className={styles.brandRow}>
+        <BuoyantLogo className={styles.logoMark} />
+        <h1 className={styles.title}>Buoyant AI Proposal Revising</h1>
+      </header>
+
       <main className={styles.main}>
-        <h1>Upload a PDF</h1>
         <form onSubmit={handleSubmit} className={styles.form}>
           <input ref={inputRef} type="file" accept="application/pdf" />
           <button type="submit" disabled={busy}>
@@ -204,19 +201,9 @@ export default function Home() {
         )}
 
         {status === "success" && result && (
-          <div className={styles.result}>
-            <p role="status">
-              Read <strong>{result.name}</strong> ({formatBytes(result.size)})
-            </p>
-            <span
-              className={`${styles.badge} ${
-                result.source === "embedded" ? styles.badgeEmbedded : styles.badgeOcr
-              }`}
-            >
-              {result.source === "embedded" ? "Detected via PDF text metadata" : "Detected via Tesseract OCR"}
-            </span>
-            <pre className={styles.text}>{result.text || "(no text found)"}</pre>
-          </div>
+          <p role="status" className={styles.resultStatus}>
+            <strong>{result.name}</strong> is ready to revise ({formatBytes(result.size)})
+          </p>
         )}
       </main>
 
@@ -403,4 +390,17 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// Placeholder wordmark, standing in for the real Buoyant logo until it's
+// supplied - a buoy riding a wave, in the brand's accent color via
+// `currentColor` so its container can set the color.
+function BuoyantLogo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 40 40" className={className} role="img" aria-label="Buoyant">
+      <rect width="40" height="40" rx="10" fill="currentColor" />
+      <circle cx="20" cy="15" r="4" fill="white" />
+      <path d="M7 24c3-4 6-4 9 0s6 4 9 0 6-4 9 0" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
 }
