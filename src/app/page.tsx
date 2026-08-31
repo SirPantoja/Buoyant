@@ -176,8 +176,12 @@ export default function Home() {
   return (
     <div className={styles.page}>
       <header className={styles.brandRow}>
-        <BuoyantLogo className={styles.logoMark} />
-        <h1 className={styles.title}>Buoyant AI Proposal Revising</h1>
+        {/* eslint-disable-next-line @next/next/no-img-element -- a tiny (42x43) static icon, not worth next/image's overhead */}
+        <img src="/logo.png" alt="Buoyant" className={styles.logoMark} />
+        <div>
+          <h1 className={styles.title}>Buoyant</h1>
+          <p className={styles.subtitle}>Seamlessly edit your proposals</p>
+        </div>
       </header>
 
       <main className={styles.main}>
@@ -190,7 +194,7 @@ export default function Home() {
                 ? "Rendering..."
                 : status === "ocr"
                   ? "Running OCR..."
-                  : "Upload"}
+                  : "Begin Revising"}
           </button>
         </form>
 
@@ -397,17 +401,4 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// Placeholder wordmark, standing in for the real Buoyant logo until it's
-// supplied - a buoy riding a wave, in the brand's accent color via
-// `currentColor` so its container can set the color.
-function BuoyantLogo({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 40 40" className={className} role="img" aria-label="Buoyant">
-      <rect width="40" height="40" rx="10" fill="currentColor" />
-      <circle cx="20" cy="15" r="4" fill="white" />
-      <path d="M7 24c3-4 6-4 9 0s6 4 9 0 6-4 9 0" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" />
-    </svg>
-  );
 }
