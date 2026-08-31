@@ -37,10 +37,14 @@ export async function generateRevision(currentText: string, instructions: string
   const client = new Anthropic({ apiKey, baseURL: HIRING_PROXY_BASE_URL });
   let response: Anthropic.Message;
   try {
+    // Deliberately minimal request body (model/max_tokens/messages only) -
+    // a newer field like output_config.effort is one plausible reason a
+    // narrower proxy in front of the real API would choke on requests it
+    // doesn't recognize, so keep this to what any Messages API version
+    // supports until there's a confirmed reason to add more.
     response = await client.messages.create({
       model: MODEL,
       max_tokens: 2048,
-      output_config: { effort: "low" },
       messages: [
         {
           role: "user",
