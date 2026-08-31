@@ -23,6 +23,7 @@ function page(paragraphTexts: string[]): RenderedPage {
       fontFamily: "sans-serif",
       fontSize: 12,
       color: "rgb(0, 0, 0)",
+      backgroundColor: "rgb(255, 255, 255)",
     })),
   };
 }

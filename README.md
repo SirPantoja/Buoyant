@@ -54,11 +54,17 @@ npm test        # run the test suite
   positions (`src/lib/render-pdf-pages.ts`); for a scanned PDF, they come
   from the paragraph/line regions Tesseract finds while recognizing the
   page (`src/lib/ocr.ts`).
-- Each line also carries its font family, font size, and color, read from
-  `pdfjs-dist`'s text-layer metadata for an embedded-text PDF, or estimated
-  from line height for a scanned one; color comes from sampling the
-  rendered page's actual pixels (`src/lib/sample-color.ts`), since neither
-  source exposes fill color directly. Paragraphs split on any of three
+- Each line also carries its font family, font size, color, and background
+  color, read from `pdfjs-dist`'s text-layer metadata for an embedded-text
+  PDF, or estimated from line height for a scanned one; color and
+  background color both come from sampling the rendered page's actual
+  pixels (`src/lib/sample-color.ts`) — the darkest sampled point in the
+  line's box for the ink, the lightest for the page behind it — since
+  neither source exposes either directly. The background sample is what
+  lets a confirmed edit's overlay sit on the same background as the
+  original text (a colored callout box, a tinted page, etc.) instead of a
+  plain highlight color, so it blends into the page. Paragraphs split on
+  any of three
   signals: a line whose font size is clearly different from the line
   before it (a heading immediately above body text), a vertical gap
   before it that's clearly wider than normal line spacing (a blank line
@@ -91,8 +97,9 @@ npm test        # run the test suite
   always returns the fixed string `"this is an ai edit"`, so the request/
   loading/review flow is already real even though the "AI" isn't yet. While
   the request is in flight the panel shows a spinner; once a response comes
-  back you choose to **Confirm** it (applies to the paragraph, styled to
-  match the original), **Try again** (resends the same instructions), or
+  back you choose to **Confirm** it (applies to the paragraph, styled and
+  set on the same background as the original), **Try again** (resends the
+  same instructions), or
   **Try again with edits** (goes back to the text box, prefilled with what
   you typed, to revise your instructions before resending) — nothing is
   applied to the paragraph until you confirm.
@@ -136,13 +143,16 @@ on the client.
   gap; a font size change alone starts a new paragraph even with no extra
   gap; a color change alone does too; a font family change alone does
   not cause a split; and font-size or color-sampling noise within
-  tolerance doesn't cause a false split. Also checks that Tesseract's
-  paragraph/line blocks are flattened and re-split the same way for the
-  OCR path.
+  tolerance doesn't cause a false split. Also checks that the sampled
+  background color is carried onto a resulting paragraph independently of
+  the ink color, and that Tesseract's paragraph/line blocks are flattened
+  and re-split the same way for the OCR path.
 - `sample-color.test.ts` checks that the pixel-sampling color reader finds
-  ink wherever it is in a line's box, using a fake canvas context — it
-  doesn't just check one row of pixels, since a real glyph's ink might not
-  cross the exact vertical center sampled.
+  ink (the darkest sampled point) and background (the lightest) wherever
+  they are in a line's box, using a fake canvas context — it doesn't just
+  check one row of pixels, since a real glyph's ink, or a gap of
+  background between glyphs, might not cross the exact vertical center
+  sampled.
 - `paragraph-edits.test.ts` checks the per-paragraph edit history: it seeds
   one history per paragraph with the original text, appends new edits
   immutably, reports the current (latest) text for a paragraph, and checks

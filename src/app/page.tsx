@@ -241,6 +241,12 @@ export default function Home() {
                     top: `${(paragraph.y / page.height) * 100}%`,
                     width: `${(paragraph.width / page.width) * 100}%`,
                     height: `${(paragraph.height / page.height) * 100}%`,
+                    // Matches the page background sampled from behind the
+                    // original text, rather than a plain highlight color, so
+                    // the edit blends into the page. Set here (inline) rather
+                    // than in CSS so it also always wins over the generic
+                    // hover tint below, whether hovered or not.
+                    ...(edited ? { backgroundColor: paragraph.backgroundColor } : {}),
                   };
                   // Sized in container-width units (relative to the page
                   // image's own rendered width, via `.pageWrapper`'s

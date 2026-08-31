@@ -9,6 +9,7 @@ export type ParagraphBox = {
   fontFamily: string;
   fontSize: number;
   color: string;
+  backgroundColor: string;
 };
 
 // A single rendered PDF page, ready to display with clickable/hoverable
@@ -33,6 +34,7 @@ export type StyledLine = {
   fontFamily: string;
   fontSize: number;
   color: RgbColor;
+  backgroundColor: RgbColor;
 };
 
 function median(values: number[]): number {
@@ -119,7 +121,7 @@ export function groupLinesIntoParagraphs(lines: StyledLine[]): ParagraphBox[] {
     const xMax = Math.max(...linesInParagraph.map((l) => l.xMax));
     const yMin = Math.min(...linesInParagraph.map((l) => l.yMin));
     const yMax = Math.max(...linesInParagraph.map((l) => l.yMax));
-    const { fontFamily, fontSize, color } = linesInParagraph[0];
+    const { fontFamily, fontSize, color, backgroundColor } = linesInParagraph[0];
 
     return {
       text,
@@ -130,6 +132,7 @@ export function groupLinesIntoParagraphs(lines: StyledLine[]): ParagraphBox[] {
       fontFamily,
       fontSize,
       color: `rgb(${color.r}, ${color.g}, ${color.b})`,
+      backgroundColor: `rgb(${backgroundColor.r}, ${backgroundColor.g}, ${backgroundColor.b})`,
     };
   });
 }
@@ -148,7 +151,11 @@ type SampleColorFn = (xMin: number, xMax: number, yMin: number, yMax: number) =>
 // overlay text, so every OCR line shares this placeholder font family.
 const OCR_FONT_FAMILY = "sans-serif";
 
-function linesFromTesseractParagraph(paragraph: TesseractParagraph, sampleColor: SampleColorFn): StyledLine[] {
+function linesFromTesseractParagraph(
+  paragraph: TesseractParagraph,
+  sampleColor: SampleColorFn,
+  sampleBackgroundColor: SampleColorFn,
+): StyledLine[] {
   return paragraph.lines
     .filter((line) => line.text.trim().length > 0)
     .map((line) => {
@@ -162,6 +169,7 @@ function linesFromTesseractParagraph(paragraph: TesseractParagraph, sampleColor:
         fontFamily: OCR_FONT_FAMILY,
         fontSize: y1 - y0,
         color: sampleColor(x0, x1, y0, y1),
+        backgroundColor: sampleBackgroundColor(x0, x1, y0, y1),
       };
     });
 }
@@ -171,12 +179,18 @@ function linesFromTesseractParagraph(paragraph: TesseractParagraph, sampleColor:
 // account for a font size change partway through, so each one is
 // re-split the same way as the embedded-text-layer path (which may also
 // split it further on an internal gap wider than its own line spacing).
-export function extractOcrParagraphs(page: TesseractPageLike, sampleColor: SampleColorFn): ParagraphBox[] {
+export function extractOcrParagraphs(
+  page: TesseractPageLike,
+  sampleColor: SampleColorFn,
+  sampleBackgroundColor: SampleColorFn,
+): ParagraphBox[] {
   if (!page.blocks) {
     return [];
   }
 
   return page.blocks.flatMap((block) =>
-    block.paragraphs.flatMap((paragraph) => groupLinesIntoParagraphs(linesFromTesseractParagraph(paragraph, sampleColor))),
+    block.paragraphs.flatMap((paragraph) =>
+      groupLinesIntoParagraphs(linesFromTesseractParagraph(paragraph, sampleColor, sampleBackgroundColor)),
+    ),
   );
 }

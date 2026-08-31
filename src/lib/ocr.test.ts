@@ -115,7 +115,11 @@ describe("OCR against a real scanned PDF", () => {
       // `data.blocks` is null and there's nothing to extract paragraphs
       // from at all, regardless of the splitting heuristic.
       const { data: result } = await worker.recognize(canvas.toBuffer("image/png"), {}, { blocks: true });
-      const paragraphs = extractOcrParagraphs(result, () => ({ r: 0, g: 0, b: 0 }));
+      const paragraphs = extractOcrParagraphs(
+        result,
+        () => ({ r: 0, g: 0, b: 0 }),
+        () => ({ r: 255, g: 255, b: 255 }),
+      );
 
       // The scanned page has a chapter heading, a subheading, and five
       // body paragraphs - Tesseract's own paragraph detection alone only

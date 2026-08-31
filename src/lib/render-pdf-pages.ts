@@ -1,5 +1,5 @@
 import { groupLinesIntoParagraphs, type RenderedPage, type StyledLine } from "./pdf-paragraphs";
-import { sampleTextColor } from "./sample-color";
+import { sampleBackgroundColor, sampleTextColor } from "./sample-color";
 
 const RENDER_SCALE = 2;
 
@@ -80,6 +80,7 @@ function buildStyledLines(
       fontFamily: styles[firstItem.fontName]?.fontFamily ?? "sans-serif",
       fontSize,
       color: sampleTextColor(context, xMin, xMax, yMin, yMax),
+      backgroundColor: sampleBackgroundColor(context, xMin, xMax, yMin, yMax),
     };
   });
 }

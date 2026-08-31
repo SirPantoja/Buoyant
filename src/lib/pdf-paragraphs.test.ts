@@ -4,6 +4,7 @@ import type { RgbColor } from "./sample-color";
 
 const black: RgbColor = { r: 10, g: 10, b: 10 };
 const red: RgbColor = { r: 200, g: 20, b: 20 };
+const white: RgbColor = { r: 255, g: 255, b: 255 };
 
 function line(overrides: Partial<StyledLine> & Pick<StyledLine, "text" | "yMin" | "yMax">): StyledLine {
   return {
@@ -12,6 +13,7 @@ function line(overrides: Partial<StyledLine> & Pick<StyledLine, "text" | "yMin" 
     fontFamily: "sans-serif",
     fontSize: 12,
     color: black,
+    backgroundColor: white,
     ...overrides,
   };
 }
@@ -108,13 +110,24 @@ describe("groupLinesIntoParagraphs", () => {
   });
 
   it("carries the first line's style onto the resulting paragraph, formatted as a CSS color", () => {
-    const lines = [line({ text: "Styled text", yMin: 0, yMax: 12, fontFamily: "serif", fontSize: 16, color: red })];
+    const lines = [
+      line({
+        text: "Styled text",
+        yMin: 0,
+        yMax: 12,
+        fontFamily: "serif",
+        fontSize: 16,
+        color: red,
+        backgroundColor: { r: 30, g: 30, b: 30 },
+      }),
+    ];
 
     const [paragraph] = groupLinesIntoParagraphs(lines);
 
     expect(paragraph.fontFamily).toBe("serif");
     expect(paragraph.fontSize).toBe(16);
     expect(paragraph.color).toBe("rgb(200, 20, 20)");
+    expect(paragraph.backgroundColor).toBe("rgb(30, 30, 30)");
   });
 
   it("returns nothing for no lines", () => {
@@ -124,6 +137,7 @@ describe("groupLinesIntoParagraphs", () => {
 
 describe("extractOcrParagraphs", () => {
   const sampleColor = () => black;
+  const sampleBackgroundColor = () => white;
 
   it("flattens Tesseract's blocks/paragraphs/lines into paragraph boxes", () => {
     const page = {
@@ -143,7 +157,7 @@ describe("extractOcrParagraphs", () => {
       ],
     };
 
-    const paragraphs = extractOcrParagraphs(page, sampleColor);
+    const paragraphs = extractOcrParagraphs(page, sampleColor, sampleBackgroundColor);
 
     expect(paragraphs).toHaveLength(1);
     expect(paragraphs[0].text).toBe("First line Second line");
@@ -167,7 +181,7 @@ describe("extractOcrParagraphs", () => {
       ],
     };
 
-    const paragraphs = extractOcrParagraphs(page, sampleColor);
+    const paragraphs = extractOcrParagraphs(page, sampleColor, sampleBackgroundColor);
 
     expect(paragraphs).toHaveLength(2);
     expect(paragraphs.map((p) => p.text)).toEqual(["Small line", "Much bigger line"]);
@@ -196,13 +210,38 @@ describe("extractOcrParagraphs", () => {
       "0,22": red,
     };
 
-    const paragraphs = extractOcrParagraphs(page, (xMin, _xMax, yMin) => colorForLine[`${xMin},${yMin}`] ?? black);
+    const paragraphs = extractOcrParagraphs(
+      page,
+      (xMin, _xMax, yMin) => colorForLine[`${xMin},${yMin}`] ?? black,
+      sampleBackgroundColor,
+    );
 
     expect(paragraphs).toHaveLength(2);
     expect(paragraphs.map((p) => p.text)).toEqual(["Black line", "Red line"]);
   });
 
+  it("samples the background separately from the ink color", () => {
+    const page = {
+      blocks: [
+        {
+          paragraphs: [
+            {
+              text: "ignored",
+              bbox: { x0: 0, y0: 0, x1: 100, y1: 20 },
+              lines: [{ text: "Some line", bbox: { x0: 0, y0: 0, x1: 100, y1: 20 } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const cream: RgbColor = { r: 250, g: 245, b: 230 };
+    const [paragraph] = extractOcrParagraphs(page, sampleColor, () => cream);
+
+    expect(paragraph.backgroundColor).toBe("rgb(250, 245, 230)");
+  });
+
   it("returns nothing when Tesseract found no blocks", () => {
-    expect(extractOcrParagraphs({ blocks: null }, sampleColor)).toEqual([]);
+    expect(extractOcrParagraphs({ blocks: null }, sampleColor, sampleBackgroundColor)).toEqual([]);
   });
 });
