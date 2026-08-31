@@ -34,6 +34,16 @@ npm test        # run the test suite
 ```
 
 ## Design Decisions
+### Tesseract
+Sometimes, PDFs do not have an embedded text layer so I used the Tesseract library as a fallback in those cases to do OCR (Optical Character Recognition) and gather the characters from the pdf.
+### Paragraph Fine tuning
+It was often hard to know when a new paragraph started and one ended. To this end I considered a few heuristics including font size, font family, text color, and line spacing. Through empirical testing locally, I landed on just using spacing and color and found it to be good enough for our purposes.
+### AI Stubbing
+In order to consider tokens, throughout the entire development process instead of making real calls to Anthropic AI endpoint, I just created a stub that returned dummy responses. This saved my time and tokens until the very end when I put it all together.
+### Resend library
+I integrated with the Resend library because it was free (woohoo!) and doesn't need a sending domain to get started which saved a lot of time.
+### Undo/History
+I built the edits as objects in a list so that undo would be as easy as popping the last in the list. This made displaying the history easy and undo a simple feature to implement.
 ## What I cut and why
 ### UI matching Buoyant website standards
 The buoyant website is very pretty and follows clear UX patterns. I tried my best to match the theming but at a certain point trying to match is not an effective use of time. In a real situation, having a shared UX library would help standardize this process so I did best effort changes to match the UX and scrape the logo. I also think the UX is important, but spending time on features users actually want and will use is higher priority once the UX is good enough.
