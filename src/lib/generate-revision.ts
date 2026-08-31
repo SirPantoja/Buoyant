@@ -35,24 +35,40 @@ export async function generateRevision(currentText: string, instructions: string
   assertValidHeaderValue(apiKey, "ANTHROPIC_API_KEY");
 
   const client = new Anthropic({ apiKey, baseURL: HIRING_PROXY_BASE_URL });
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2048,
-    output_config: { effort: "low" },
-    messages: [
-      {
-        role: "user",
-        content: [
-          "Revise the following paragraph according to the instructions.",
-          "Respond with only the revised paragraph text - no preamble, no quotes, no explanation.",
-          "",
-          `Paragraph:\n"""\n${currentText}\n"""`,
-          "",
-          `Instructions: ${instructions}`,
-        ].join("\n"),
-      },
-    ],
-  });
+  let response: Anthropic.Message;
+  try {
+    response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 2048,
+      output_config: { effort: "low" },
+      messages: [
+        {
+          role: "user",
+          content: [
+            "Revise the following paragraph according to the instructions.",
+            "Respond with only the revised paragraph text - no preamble, no quotes, no explanation.",
+            "",
+            `Paragraph:\n"""\n${currentText}\n"""`,
+            "",
+            `Instructions: ${instructions}`,
+          ].join("\n"),
+        },
+      ],
+    });
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      // The SDK trusts the response's Content-Type header and calls
+      // response.json() directly (see @anthropic-ai/sdk/internal/parse.js) -
+      // if the hiring proxy claims application/json but actually sends back
+      // something else (e.g. a mis-encoded or truncated body), JSON.parse
+      // throws with the raw, often unreadable bytes quoted in the message.
+      // That's not useful shown to a user, so log the original for
+      // debugging and surface something actionable instead.
+      console.error("generateRevision: hiring proxy returned a response that wasn't valid JSON", error);
+      throw new Error("The AI service returned an unreadable response - this is usually temporary. Please try again.");
+    }
+    throw error;
+  }
 
   const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === "text");
   if (!textBlock) {

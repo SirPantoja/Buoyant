@@ -79,6 +79,18 @@ describe("generateRevision", () => {
       await expect(generateRevision("Original text", "Make it shorter")).rejects.toThrow("network error");
     });
 
+    it("replaces an unreadable (non-JSON) proxy response with a clear message", async () => {
+      createMock.mockRejectedValue(new SyntaxError('Unexpected token \x1f, "\x1f$\x8b\x00..." is not valid JSON'));
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await expect(generateRevision("Original text", "Make it shorter")).rejects.toThrow(
+        "The AI service returned an unreadable response",
+      );
+      expect(consoleErrorSpy).toHaveBeenCalled();
+
+      consoleErrorSpy.mockRestore();
+    });
+
     it("fails clearly instead of calling the API when the key contains a non-Latin-1 character", async () => {
       process.env.ANTHROPIC_API_KEY = "sk-ant-abc—123";
 
